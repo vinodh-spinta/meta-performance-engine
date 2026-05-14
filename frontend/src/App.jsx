@@ -12,56 +12,6 @@ export default function App() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Check for token in URL after OAuth callback
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const errorMsg = params.get('error');
-
-    if (token) {
-      setAccessToken(token);
-      setLoggedIn(true);
-      setSuccess('✅ Logged in successfully!');
-      fetchAdAccounts(token);
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (errorMsg) {
-      setError(`OAuth error: ${errorMsg}`);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
-
-  const fetchAdAccounts = async (token) => {
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch(`${API_URL}/api/ad-accounts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setAdAccounts(data.data || []);
-        setSuccess(`✅ Found ${data.count} ad accounts!`);
-        // Auto-select first account
-        if (data.data && data.data.length > 0) {
-          setSelectedAccount(data.data[0].id);
-          fetchCampaigns(data.data[0].id, token);
-        }
-      } else {
-        setError(`Failed: ${data.error}`);
-      }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchCampaigns = async (accountId, token) => {
     setLoading(true);
     setError('');
@@ -88,6 +38,53 @@ export default function App() {
       setLoading(false);
     }
   };
+
+  const fetchAdAccounts = React.useCallback(async (token) => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/ad-accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: token })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setAdAccounts(data.data || []);
+        setSuccess(`✅ Found ${data.count} ad accounts!`);
+        if (data.data && data.data.length > 0) {
+          setSelectedAccount(data.data[0].id);
+          fetchCampaigns(data.data[0].id, token);
+        }
+      } else {
+        setError(`Failed: ${data.error}`);
+      }
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const errorMsg = params.get('error');
+
+    if (token) {
+      setAccessToken(token);
+      setLoggedIn(true);
+      setSuccess('✅ Logged in successfully!');
+      fetchAdAccounts(token);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (errorMsg) {
+      setError(`OAuth error: ${errorMsg}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [fetchAdAccounts]);
 
   const handleAccountChange = (e) => {
     const accountId = e.target.value;
@@ -119,7 +116,6 @@ export default function App() {
     setSuccess('');
   };
 
-  // LOGIN SCREEN
   if (!loggedIn) {
     return (
       <div style={{
@@ -184,7 +180,6 @@ export default function App() {
     );
   }
 
-  // DASHBOARD
   return (
     <div style={{
       background: '#0f172a',
@@ -194,7 +189,6 @@ export default function App() {
       padding: '40px 20px'
     }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-        {/* Header */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -228,7 +222,6 @@ export default function App() {
           </button>
         </div>
 
-        {/* Messages */}
         {error && (
           <div style={{
             background: '#7f1d1d',
@@ -257,7 +250,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Ad Accounts Selector */}
         <div style={{
           background: '#1e293b',
           borderRadius: '8px',
@@ -299,7 +291,6 @@ export default function App() {
           </p>
         </div>
 
-        {/* Campaigns Table */}
         <div style={{
           background: '#1e293b',
           borderRadius: '8px',
@@ -372,7 +363,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Footer */}
         <p style={{
           fontSize: '12px',
           color: '#64748b',
