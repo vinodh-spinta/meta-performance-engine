@@ -1,37 +1,74 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const API_URL = 'https://meta-performance-engine-production.up.railway.app';
 
 export default function App() {
   const [user, setUser] = useState(null);
-  const [email, setEmail] = useState('test@example.com');
-  const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
+  const [loginUrl, setLoginUrl] = useState('');
 
-  // Dashboard state
+  // Campaigns state
   const [adAccountId, setAdAccountId] = useState('');
   const [campaigns, setCampaigns] = useState([]);
   const [fetchLoading, setFetchLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setTimeout(() => {
-      setUser({ email });
-      setLoading(false);
-      setSuccess('Logged in successfully! Enter a Meta Ad Account ID to fetch campaigns.');
-    }, 500);
+  // On component mount, check if we're in the OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+
+    if (code) {
+      handleOAuthCallback(code);
+    } else {
+      // Get login URL
+      fetchLoginUrl();
+    }
+  }, []);
+
+  // Fetch login URL from backend
+  const fetchLoginUrl = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login-url`);
+      const data = await response.json();
+      if (data.success) {
+        setLoginUrl(data.loginUrl);
+      }
+    } catch (err) {
+      console.error('Error fetching login URL:', err);
+    }
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setAdAccountId('');
-    setCampaigns([]);
-    setError('');
-    setSuccess('');
+  // Handle OAuth callback
+  const handleOAuthCallback = async (code) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/callback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setUser({
+          name: data.user.name,
+          email: data.user.email,
+          accessToken: data.accessToken
+        });
+        setSuccess(`✅ Logged in as ${data.user.name}!`);
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        setError(`Error: ${data.error}`);
+      }
+    } catch (err) {
+      setError(`Connection error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFetchCampaigns = async (e) => {
@@ -47,12 +84,13 @@ export default function App() {
     setFetchLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/fetch-campaigns`, {
+      const response = await fetch(`${API_URL}/api/campaigns`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ adAccountId: adAccountId.trim() })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adAccountId: adAccountId.trim(),
+          accessToken: user.accessToken
+        })
       });
 
       const data = await response.json();
@@ -72,6 +110,14 @@ export default function App() {
     }
   };
 
+  const handleLogout = () => {
+    setUser(null);
+    setAdAccountId('');
+    setCampaigns([]);
+    setError('');
+    setSuccess('');
+  };
+
   // LOGIN SCREEN
   if (!user) {
     return (
@@ -88,7 +134,7 @@ export default function App() {
           background: 'white',
           borderRadius: '12px',
           padding: '40px',
-          maxWidth: '400px',
+          maxWidth: '450px',
           width: '100%',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
         }}>
@@ -98,44 +144,38 @@ export default function App() {
           <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#3b82f6', margin: '0 0 32px' }}>
             Engine
           </h2>
-          <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 24px', lineHeight: '1.6' }}>
-            Real-time Meta Ads analytics powered by Claude AI + Meta MCP
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 32px', lineHeight: '1.6' }}>
+            Real-time Meta Ads analytics powered by Claude AI + Meta MCP. Secure OAuth login with your Meta account.
           </p>
 
-          <form onSubmit={handleLogin}>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email"
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '20px' }}>
+              <p style={{ color: '#64748b' }}>Logging in...</p>
+            </div>
+          ) : loginUrl ? (
+            <a
+              href={loginUrl}
               style={{
+                display: 'inline-block',
                 width: '100%',
                 padding: '12px',
-                marginBottom: '16px',
-                border: '1px solid #cbd5e1',
+                background: '#1877f2',
+                color: 'white',
+                border: 'none',
                 borderRadius: '8px',
-                boxSizing: 'border-box',
-                fontSize: '14px'
+                fontWeight: '700',
+                cursor: 'pointer',
+                textAlign: 'center',
+                textDecoration: 'none',
+                fontSize: '14px',
+                marginBottom: '16px'
               }}
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              style={{
-                width: '100%',
-                padding: '12px',
-                marginBottom: '24px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                boxSizing: 'border-box',
-                fontSize: '14px'
-              }}
-            />
+            >
+              🔐 Login with Meta
+            </a>
+          ) : (
             <button
-              type="submit"
-              disabled={loading}
+              onClick={fetchLoginUrl}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -144,21 +184,21 @@ export default function App() {
                 border: 'none',
                 borderRadius: '8px',
                 fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1
+                cursor: 'pointer',
+                fontSize: '14px'
               }}
             >
-              {loading ? 'Logging in...' : 'Login'}
+              Start Login
             </button>
-          </form>
+          )}
 
           <p style={{
-            fontSize: '12px',
+            fontSize: '11px',
             color: '#94a3b8',
             textAlign: 'center',
-            margin: '20px 0 0'
+            margin: '24px 0 0'
           }}>
-            Demo: test@example.com / password123
+            Your Meta account login is secure and encrypted. We only access your ad account data.
           </p>
         </div>
       </div>
@@ -189,7 +229,7 @@ export default function App() {
               Meta Performance Engine
             </h1>
             <p style={{ fontSize: '14px', color: '#94a3b8', margin: '8px 0 0' }}>
-              Fetching real-time campaign data via Claude + Meta MCP
+              Welcome, <strong>{user.name}</strong> | Real-time campaign data via Claude + Meta MCP
             </p>
           </div>
           <button
@@ -289,7 +329,7 @@ export default function App() {
             margin: '12px 0 0',
             lineHeight: '1.5'
           }}>
-            💡 Enter your Meta ad account ID to fetch all campaigns. The data is fetched in real-time from Meta Ads via Claude AI.
+            💡 Enter your Meta ad account ID to fetch all campaigns. Data is fetched securely using your authenticated Meta account.
           </p>
         </div>
 
@@ -402,7 +442,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          Backend: {API_URL} | Meta MCP: https://mcp.facebook.com/ads
+          Secure • Encrypted • OAuth Authenticated | Backend: {API_URL}
         </p>
       </div>
     </div>
