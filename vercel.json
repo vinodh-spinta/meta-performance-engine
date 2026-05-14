@@ -1,8 +1,0 @@
-{
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/build",
-  "framework": "react",
-  "env": {
-    "REACT_APP_API_URL": "https://meta-performance-engine-production.up.railway.app"
-  }
-}
