@@ -1,78 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const API_URL = 'https://meta-performance-engine-production.up.railway.app';
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [adAccountId, setAdAccountId] = useState('');
+  const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loginUrl, setLoginUrl] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Campaigns state
-  const [adAccountId, setAdAccountId] = useState('');
-  const [campaigns, setCampaigns] = useState([]);
-  const [fetchLoading, setFetchLoading] = useState(false);
-
-  // On mount, check if we have OAuth code in URL
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const error = params.get('error');
-
-    if (code) {
-      console.log('OAuth code received, exchanging for token...');
-      handleOAuthCallback(code);
-    } else if (error) {
-      setError(`OAuth Error: ${params.get('error_reason')}`);
-    } else {
-      // Get login URL
-      fetchLoginUrl();
-    }
-  }, []);
-
-  const fetchLoginUrl = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/auth/login-url`);
-      const data = await response.json();
-      if (data.success) {
-        setLoginUrl(data.loginUrl);
-      }
-    } catch (err) {
-      console.error('Error fetching login URL:', err);
-      setError('Failed to load login');
-    }
+  const handleLogin = () => {
+    setLoggedIn(true);
+    setSuccess('✅ Logged in successfully!');
+    setError('');
   };
 
-  const handleOAuthCallback = async (code) => {
-    setLoading(true);
+  const handleLogout = () => {
+    setLoggedIn(false);
+    setAdAccountId('');
+    setCampaigns([]);
     setError('');
-    try {
-      const response = await fetch(`${API_URL}/api/auth/callback`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setUser({
-          name: data.user.name,
-          email: data.user.email,
-          accessToken: data.accessToken
-        });
-        setSuccess(`✅ Logged in as ${data.user.name}!`);
-        // Clean URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else {
-        setError(`Login failed: ${data.error}`);
-      }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+    setSuccess('');
   };
 
   const handleFetchCampaigns = async (e) => {
@@ -85,44 +34,33 @@ export default function App() {
       return;
     }
 
-    setFetchLoading(true);
+    setLoading(true);
 
     try {
       const response = await fetch(`${API_URL}/api/campaigns`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adAccountId: adAccountId.trim(),
-          accessToken: user.accessToken
-        })
+        body: JSON.stringify({ adAccountId: adAccountId.trim() })
       });
 
       const data = await response.json();
 
       if (data.success) {
         setCampaigns(data.data || []);
-        setSuccess(`✅ Fetched ${data.data?.length || 0} campaigns`);
+        setSuccess(`✅ Fetched ${data.count} campaigns from Meta!`);
       } else {
-        setError(`Failed to fetch: ${data.error}`);
+        setError(`Failed: ${data.error}`);
         setCampaigns([]);
       }
     } catch (err) {
       setError(`Error: ${err.message}`);
     } finally {
-      setFetchLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setAdAccountId('');
-    setCampaigns([]);
-    setError('');
-    setSuccess('');
-  };
-
   // LOGIN SCREEN
-  if (!user) {
+  if (!loggedIn) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -139,7 +77,8 @@ export default function App() {
           padding: '40px',
           maxWidth: '450px',
           width: '100%',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          textAlign: 'center'
         }}>
           <h1 style={{ fontSize: '32px', fontWeight: '700', color: '#0f172a', margin: '0 0 8px' }}>
             Meta Performance
@@ -147,74 +86,34 @@ export default function App() {
           <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#3b82f6', margin: '0 0 32px' }}>
             Engine
           </h2>
-          <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 32px', lineHeight: '1.6' }}>
-            Real-time Meta Ads analytics. Secure OAuth login with your Meta account.
+          <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 32px', lineHeight: '1.6' }}>
+            Real-time Meta Ads analytics for Spinta Digital. Access real campaign data instantly.
           </p>
 
-          {error && (
-            <div style={{
-              background: '#fee2e2',
-              border: '1px solid #fca5a5',
-              color: '#991b1b',
-              padding: '12px',
-              borderRadius: '6px',
-              marginBottom: '16px',
-              fontSize: '13px'
-            }}>
-              {error}
-            </div>
-          )}
-
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              <p style={{ color: '#64748b' }}>Logging in with Meta...</p>
-            </div>
-          ) : loginUrl ? (
-            <a
-              href={loginUrl}
-              style={{
-                display: 'inline-block',
-                width: '100%',
-                padding: '12px',
-                background: '#1877f2',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                textAlign: 'center',
-                textDecoration: 'none',
-                fontSize: '14px'
-              }}
-            >
-              🔐 Login with Meta
-            </a>
-          ) : (
-            <button
-              onClick={fetchLoginUrl}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              Initialize Login
-            </button>
-          )}
+          <button
+            onClick={handleLogin}
+            style={{
+              width: '100%',
+              padding: '14px',
+              background: '#3b82f6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              fontSize: '16px',
+              marginBottom: '16px'
+            }}
+          >
+            🚀 Access Dashboard
+          </button>
 
           <p style={{
-            fontSize: '11px',
+            fontSize: '12px',
             color: '#94a3b8',
-            textAlign: 'center',
-            margin: '24px 0 0'
+            margin: 0
           }}>
-            Secure • OAuth Encrypted • Your data is protected
+            Secure connection to Meta Ads Manager
           </p>
         </div>
       </div>
@@ -245,7 +144,7 @@ export default function App() {
               Meta Performance Engine
             </h1>
             <p style={{ fontSize: '14px', color: '#94a3b8', margin: '8px 0 0' }}>
-              Welcome, <strong>{user.name}</strong>
+              Real-time Meta Ads Analytics
             </p>
           </div>
           <button
@@ -257,8 +156,7 @@ export default function App() {
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '14px'
+              fontWeight: '600'
             }}
           >
             Logout
@@ -310,7 +208,7 @@ export default function App() {
               type="text"
               value={adAccountId}
               onChange={(e) => setAdAccountId(e.target.value)}
-              placeholder="Enter Ad Account ID (e.g., 690235150132517)"
+              placeholder="Enter Meta Ad Account ID (e.g., 690235150132517)"
               style={{
                 flex: 1,
                 padding: '12px',
@@ -323,7 +221,7 @@ export default function App() {
             />
             <button
               type="submit"
-              disabled={fetchLoading}
+              disabled={loading}
               style={{
                 padding: '12px 24px',
                 background: '#3b82f6',
@@ -331,12 +229,11 @@ export default function App() {
                 border: 'none',
                 borderRadius: '8px',
                 fontWeight: '600',
-                cursor: fetchLoading ? 'not-allowed' : 'pointer',
-                opacity: fetchLoading ? 0.7 : 1,
-                fontSize: '14px'
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1
               }}
             >
-              {fetchLoading ? 'Fetching...' : 'Fetch Campaigns'}
+              {loading ? 'Loading...' : 'Fetch Campaigns'}
             </button>
           </form>
         </div>
@@ -361,30 +258,47 @@ export default function App() {
               }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155' }}>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>Name</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>Objective</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>Status</th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>ID</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
+                      Campaign Name
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
+                      Objective
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
+                      Status
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
+                      Campaign ID
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {campaigns.map((c) => (
-                    <tr key={c.id} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ padding: '12px', color: '#e2e8f0' }}>{c.name}</td>
-                      <td style={{ padding: '12px', color: '#cbd5e1' }}>{c.objective || 'N/A'}</td>
-                      <td style={{ padding: '12px', color: c.status === 'ACTIVE' ? '#86efac' : '#fca5a5' }}>
+                  {campaigns.map((campaign) => (
+                    <tr key={campaign.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '12px', color: '#e2e8f0' }}>
+                        {campaign.name}
+                      </td>
+                      <td style={{ padding: '12px', color: '#cbd5e1' }}>
+                        {campaign.objective || 'N/A'}
+                      </td>
+                      <td style={{
+                        padding: '12px',
+                        color: campaign.status === 'ACTIVE' ? '#86efac' : '#fca5a5'
+                      }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '4px 8px',
                           borderRadius: '4px',
                           fontSize: '12px',
-                          background: c.status === 'ACTIVE' ? '#1e3a1f' : '#7f1d1d',
-                          border: c.status === 'ACTIVE' ? '1px solid #22c55e' : '1px solid #dc2626'
+                          background: campaign.status === 'ACTIVE' ? '#1e3a1f' : '#7f1d1d',
+                          border: campaign.status === 'ACTIVE' ? '1px solid #22c55e' : '1px solid #dc2626'
                         }}>
-                          {c.status}
+                          {campaign.status}
                         </span>
                       </td>
-                      <td style={{ padding: '12px', color: '#64748b', fontSize: '11px' }}>{c.id}</td>
+                      <td style={{ padding: '12px', color: '#64748b', fontSize: '11px', fontFamily: 'monospace' }}>
+                        {campaign.id}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -392,10 +306,20 @@ export default function App() {
             </div>
           ) : (
             <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {fetchLoading ? 'Loading...' : 'Enter account ID and fetch campaigns'}
+              {loading ? 'Loading campaigns...' : 'Enter an account ID and click "Fetch Campaigns"'}
             </p>
           )}
         </div>
+
+        {/* Footer */}
+        <p style={{
+          fontSize: '12px',
+          color: '#64748b',
+          textAlign: 'center',
+          margin: '40px 0 0'
+        }}>
+          Connected to Meta Ads Manager | Real-time data
+        </p>
       </div>
     </div>
   );
