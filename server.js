@@ -15,10 +15,12 @@ app.use(express.json());
 const META_APP_ID = process.env.META_APP_ID || '1601962987562179';
 const META_APP_SECRET = process.env.META_APP_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://meta-performance-engine-production.up.railway.app/api/auth/callback';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://meta-performance--ads.vercel.app';
 
 console.log('=== META PERFORMANCE ENGINE - OAUTH PRODUCTION ===');
 console.log('✅ App ID:', META_APP_ID);
 console.log('✅ Redirect URI:', REDIRECT_URI);
+console.log('✅ Frontend URL:', FRONTEND_URL);
 console.log('✅ Ready for OAuth flow\n');
 
 // Health check
@@ -47,11 +49,11 @@ app.get('/api/auth/callback', async (req, res) => {
 
     if (error) {
       console.error('❌ OAuth error:', error);
-      return res.redirect(`https://meta-performance--ads.vercel.app?error=${encodeURIComponent(error)}`);
+      return res.redirect(`${FRONTEND_URL}?error=${encodeURIComponent(error)}`);
     }
 
     if (!code) {
-      return res.redirect('https://meta-performance--ads.vercel.app?error=No+authorization+code');
+      return res.redirect(`${FRONTEND_URL}?error=No+authorization+code`);
     }
 
     console.log('🔐 OAuth callback received, exchanging code for token...');
@@ -71,10 +73,10 @@ app.get('/api/auth/callback', async (req, res) => {
     console.log('✅ Access token obtained from Meta');
 
     // Redirect to frontend with token
-    res.redirect(`https://meta-performance--ads.vercel.app?token=${accessToken}`);
+    res.redirect(`${FRONTEND_URL}?token=${accessToken}`);
   } catch (error) {
     console.error('❌ OAuth error:', error.response?.data || error.message);
-    res.redirect(`https://meta-performance--ads.vercel.app?error=${encodeURIComponent(error.message)}`);
+    res.redirect(`${FRONTEND_URL}?error=${encodeURIComponent(error.message)}`);
   }
 });
 
