@@ -11,9 +11,44 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Call Claude API with Meta MCP server configured
-const callClaudeWithMetaMCP = async (prompt) => {
+// Call Claude API with Meta MCP - fetch real data
+const fetchFromMetaViaClaude = async (adAccountId, dataType = 'campaigns') => {
   try {
+    let prompt = '';
+
+    if (dataType === 'campaigns') {
+      prompt = `You are connected to Meta Ads Manager via Meta MCP at https://mcp.facebook.com/ads.
+
+I need you to fetch ALL campaigns from Meta ad account: ${adAccountId}
+
+Use the ads_get_ad_entities tool with these parameters:
+- entity_type: "CAMPAIGN"
+- ad_account_id: "act_${adAccountId}"
+- fields: ["id", "name", "objective", "status", "created_time", "updated_time"]
+
+Return ONLY valid JSON with no extra text:
+{
+  "success": true,
+  "data": [
+    {
+      "id": "campaign_id",
+      "name": "campaign_name",
+      "objective": "CONVERSIONS",
+      "status": "ACTIVE",
+      "created_time": "2024-01-01T00:00:00+0000",
+      "updated_time": "2024-01-01T00:00:00+0000"
+    }
+  ]
+}
+
+If error occurs, return:
+{
+  "success": false,
+  "error": "error message",
+  "data": []
+}`;
+    }
+
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
@@ -25,7 +60,6 @@ const callClaudeWithMetaMCP = async (prompt) => {
             content: prompt
           }
         ],
-        // CRITICAL: Tell Claude API to use Meta MCP
         mcp_servers: [
           {
             type: 'url',
@@ -43,104 +77,121 @@ const callClaudeWithMetaMCP = async (prompt) => {
       }
     );
 
-    if (response.data.content && response.data.content[0]) {
-      return response.data.content[0].text;
+    // Extract response from Claude
+    const content = response.data.content[0]?.text;
+    if (!content) {
+      throw new Error('No response from Claude');
     }
-    return null;
+
+    // Parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new Error('Could not extract JSON from Claude response');
+    }
+
+    return JSON.parse(jsonMatch[0]);
   } catch (error) {
-    console.error('Claude API Error:', error.response?.data || error.message);
-    throw error;
+    console.error('Error fetching from Meta via Claude:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      data: []
+    };
   }
 };
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date() });
+  res.json({ status: 'ok', timestamp: new Date(), message: 'Backend is running' });
 });
 
-// Fetch campaigns for an ad account
-app.get('/api/campaigns/:adAccountId', async (req, res) => {
+// Fetch campaigns from any Meta ad account
+app.post('/api/fetch-campaigns', async (req, res) => {
   try {
-    const { adAccountId } = req.params;
+    const { adAccountId } = req.body;
+
+    if (!adAccountId) {
+      return res.status(400).json({ error: 'adAccountId is required', success: false });
+    }
+
     console.log(`Fetching campaigns for ad account: ${adAccountId}`);
-    
-    const prompt = `You have access to Meta Ads Manager through the Meta Ads MCP server at https://mcp.facebook.com/ads.
 
-Please fetch all campaigns for ad account ID: ${adAccountId}
+    const result = await fetchFromMetaViaClaude(adAccountId, 'campaigns');
 
-Use the ads_get_ad_entities tool with these exact parameters:
-- entity_type: "CAMPAIGN"
-- ad_account_id: "act_${adAccountId}"
-- fields: ["id", "name", "objective", "status", "created_time"]
-
-Return ONLY a valid JSON object in this format, nothing else:
-{
-  "campaigns": [
-    {
-      "id": "...",
-      "name": "...",
-      "objective": "...",
-      "status": "..."
-    }
-  ]
-}
-
-If there's an error, return:
-{
-  "error": "error message",
-  "campaigns": []
-}`;
-
-    const result = await callClaudeWithMetaMCP(prompt);
-    
-    if (!result) {
-      return res.status(500).json({ error: 'No response from Claude', campaigns: [] });
-    }
-
-    // Extract JSON from response
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const data = JSON.parse(jsonMatch[0]);
-      return res.json(data);
-    }
-    
-    return res.json({ campaigns: [], message: 'Could not parse response' });
+    res.json(result);
   } catch (error) {
-    console.error('Error fetching campaigns:', error.message);
-    res.status(500).json({ error: error.message, campaigns: [] });
-  }
-});
-
-// Test Claude API and Meta MCP connection
-app.get('/api/test', async (req, res) => {
-  try {
-    const prompt = 'What is 2+2? Respond with just the number.';
-    const result = await callClaudeWithMetaMCP(prompt);
-    
-    res.json({ 
-      success: true,
-      message: 'Claude API with Meta MCP is working',
-      result: result
-    });
-  } catch (error) {
-    res.status(500).json({ 
+    console.error('Error:', error.message);
+    res.status(500).json({
       success: false,
       error: error.message,
-      message: 'Claude API test failed'
+      data: []
     });
   }
 });
 
-// Error handling
+// Test connection to Claude + Meta MCP
+app.get('/api/test-connection', async (req, res) => {
+  try {
+    const testPrompt = `You have access to Meta Ads Manager. Please list the first 3 tools available to you from the Meta Ads MCP server. Return only a simple JSON list with tool names.`;
+
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: testPrompt
+          }
+        ],
+        mcp_servers: [
+          {
+            type: 'url',
+            url: 'https://mcp.facebook.com/ads',
+            name: 'meta-ads-mcp'
+          }
+        ]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.CLAUDE_API_KEY,
+          'anthropic-version': '2023-06-01'
+        }
+      }
+    );
+
+    const content = response.data.content[0]?.text;
+
+    res.json({
+      success: true,
+      message: 'Claude + Meta MCP connection is working',
+      response: content
+    });
+  } catch (error) {
+    console.error('Test connection error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Connection test failed'
+    });
+  }
+});
+
+// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({ error: err.message });
+  console.error('Error:', err.stack);
+  res.status(err.status || 500).json({ error: err.message, success: false });
 });
 
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Claude API Key: ${process.env.CLAUDE_API_KEY ? 'SET' : 'NOT SET'}`);
-  console.log(`Meta MCP Server: https://mcp.facebook.com/ads`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`✅ Claude API Key: ${process.env.CLAUDE_API_KEY ? 'SET' : 'NOT SET'}`);
+  console.log(`✅ Meta MCP Server: https://mcp.facebook.com/ads`);
+  console.log(`📍 Health check: GET /api/health`);
+  console.log(`📍 Fetch campaigns: POST /api/fetch-campaigns (body: {adAccountId: "xxxxx"})`);
+  console.log(`📍 Test connection: GET /api/test-connection`);
 });
