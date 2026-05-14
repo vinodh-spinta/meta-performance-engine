@@ -1,62 +1,122 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const API_URL = 'https://meta-performance-engine-production.up.railway.app';
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [adAccountId, setAdAccountId] = useState('');
+  const [accessToken, setAccessToken] = useState('');
+  const [adAccounts, setAdAccounts] = useState([]);
+  const [selectedAccount, setSelectedAccount] = useState('');
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleLogin = () => {
-    setLoggedIn(true);
-    setSuccess('✅ Logged in successfully!');
-    setError('');
-  };
+  // Check for token in URL after OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const errorMsg = params.get('error');
 
-  const handleLogout = () => {
-    setLoggedIn(false);
-    setAdAccountId('');
-    setCampaigns([]);
-    setError('');
-    setSuccess('');
-  };
-
-  const handleFetchCampaigns = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
-    if (!adAccountId.trim()) {
-      setError('Please enter an Ad Account ID');
-      return;
+    if (token) {
+      setAccessToken(token);
+      setLoggedIn(true);
+      setSuccess('✅ Logged in successfully!');
+      fetchAdAccounts(token);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (errorMsg) {
+      setError(`OAuth error: ${errorMsg}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
+  }, []);
 
+  const fetchAdAccounts = async (token) => {
     setLoading(true);
+    setError('');
 
     try {
-      const response = await fetch(`${API_URL}/api/campaigns`, {
+      const response = await fetch(`${API_URL}/api/ad-accounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adAccountId: adAccountId.trim() })
+        body: JSON.stringify({ accessToken: token })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setCampaigns(data.data || []);
-        setSuccess(`✅ Fetched ${data.count} campaigns from Meta!`);
+        setAdAccounts(data.data || []);
+        setSuccess(`✅ Found ${data.count} ad accounts!`);
+        // Auto-select first account
+        if (data.data && data.data.length > 0) {
+          setSelectedAccount(data.data[0].id);
+          fetchCampaigns(data.data[0].id, token);
+        }
       } else {
         setError(`Failed: ${data.error}`);
-        setCampaigns([]);
       }
     } catch (err) {
       setError(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchCampaigns = async (accountId, token) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adAccountId: accountId, accessToken: token })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCampaigns(data.data || []);
+        setSuccess(`✅ Fetched ${data.count} campaigns!`);
+      } else {
+        setError(`Failed: ${data.error}`);
+      }
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccountChange = (e) => {
+    const accountId = e.target.value;
+    setSelectedAccount(accountId);
+    if (accessToken) {
+      fetchCampaigns(accountId, accessToken);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/auth/login-url`);
+      const data = await response.json();
+      if (data.success) {
+        window.location.href = data.url;
+      }
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    }
+  };
+
+  const handleLogout = () => {
+    setLoggedIn(false);
+    setAccessToken('');
+    setAdAccounts([]);
+    setSelectedAccount('');
+    setCampaigns([]);
+    setError('');
+    setSuccess('');
   };
 
   // LOGIN SCREEN
@@ -87,7 +147,7 @@ export default function App() {
             Engine
           </h2>
           <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 32px', lineHeight: '1.6' }}>
-            Real-time Meta Ads analytics for Spinta Digital. Access real campaign data instantly.
+            Real-time Meta Ads analytics for Spinta Digital. Securely connect with your Meta account to view all your ad accounts and campaigns.
           </p>
 
           <button
@@ -101,20 +161,24 @@ export default function App() {
               borderRadius: '8px',
               fontWeight: '700',
               cursor: 'pointer',
-              fontSize: '16px',
-              marginBottom: '16px'
+              fontSize: '16px'
             }}
           >
-            🚀 Access Dashboard
+            🔐 Login with Meta
           </button>
 
-          <p style={{
-            fontSize: '12px',
-            color: '#94a3b8',
-            margin: 0
-          }}>
-            Secure connection to Meta Ads Manager
-          </p>
+          {error && (
+            <p style={{
+              fontSize: '12px',
+              color: '#dc2626',
+              margin: '16px 0 0',
+              background: '#fee2e2',
+              padding: '8px',
+              borderRadius: '6px'
+            }}>
+              {error}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -144,7 +208,7 @@ export default function App() {
               Meta Performance Engine
             </h1>
             <p style={{ fontSize: '14px', color: '#94a3b8', margin: '8px 0 0' }}>
-              Real-time Meta Ads Analytics
+              Real-time Meta Ads Campaign Analytics
             </p>
           </div>
           <button
@@ -156,7 +220,8 @@ export default function App() {
               border: 'none',
               borderRadius: '8px',
               cursor: 'pointer',
-              fontWeight: '600'
+              fontWeight: '600',
+              fontSize: '14px'
             }}
           >
             Logout
@@ -192,7 +257,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Input Form */}
+        {/* Ad Accounts Selector */}
         <div style={{
           background: '#1e293b',
           borderRadius: '8px',
@@ -201,41 +266,37 @@ export default function App() {
           marginBottom: '32px'
         }}>
           <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px' }}>
-            Fetch Campaigns
+            Select Ad Account
           </h2>
-          <form onSubmit={handleFetchCampaigns} style={{ display: 'flex', gap: '12px' }}>
-            <input
-              type="text"
-              value={adAccountId}
-              onChange={(e) => setAdAccountId(e.target.value)}
-              placeholder="Enter Meta Ad Account ID (e.g., 690235150132517)"
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: '#0f172a',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                color: '#e2e8f0',
-                fontSize: '14px'
-              }}
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                padding: '12px 24px',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: '600',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1
-              }}
-            >
-              {loading ? 'Loading...' : 'Fetch Campaigns'}
-            </button>
-          </form>
+          <select
+            value={selectedAccount}
+            onChange={handleAccountChange}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#0f172a',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              color: '#e2e8f0',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="">Choose an ad account...</option>
+            {adAccounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} ({account.business_name || 'N/A'})
+              </option>
+            ))}
+          </select>
+          <p style={{
+            fontSize: '12px',
+            color: '#94a3b8',
+            margin: '12px 0 0',
+            lineHeight: '1.5'
+          }}>
+            💡 Select an ad account to view its campaigns and performance metrics.
+          </p>
         </div>
 
         {/* Campaigns Table */}
@@ -306,7 +367,7 @@ export default function App() {
             </div>
           ) : (
             <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {loading ? 'Loading campaigns...' : 'Enter an account ID and click "Fetch Campaigns"'}
+              {loading ? 'Loading campaigns...' : 'Select an ad account to view campaigns.'}
             </p>
           )}
         </div>
@@ -318,7 +379,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          Connected to Meta Ads Manager | Real-time data
+          🔐 Securely connected to Meta Ads Manager | Real-time data
         </p>
       </div>
     </div>
