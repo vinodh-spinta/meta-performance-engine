@@ -11,15 +11,88 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Call Claude API with Meta MCP - fetch real data
-const fetchFromMetaViaClaude = async (adAccountId, dataType = 'campaigns') => {
+// Meta App Credentials
+const META_APP_ID = process.env.META_APP_ID || '1601962987562179';
+const META_APP_SECRET = process.env.META_APP_SECRET || 'YOUR_APP_SECRET_HERE';
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://meta-performance--ads.vercel.app/callback';
+const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+
+// Generate OAuth login URL
+app.get('/api/auth/login-url', (req, res) => {
   try {
-    let prompt = '';
+    const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=ads_management,read_insights&response_type=code&state=random_state_string`;
+    
+    res.json({
+      success: true,
+      loginUrl: loginUrl
+    });
+  } catch (error) {
+    console.error('Error generating login URL:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-    if (dataType === 'campaigns') {
-      prompt = `You are connected to Meta Ads Manager via Meta MCP at https://mcp.facebook.com/ads.
+// Handle OAuth callback and exchange code for access token
+app.post('/api/auth/callback', async (req, res) => {
+  try {
+    const { code } = req.body;
 
-I need you to fetch ALL campaigns from Meta ad account: ${adAccountId}
+    if (!code) {
+      return res.status(400).json({ success: false, error: 'No authorization code provided' });
+    }
+
+    console.log('Exchanging code for access token...');
+
+    // Exchange code for access token
+    const tokenResponse = await axios.get('https://graph.instagram.com/v18.0/oauth/access_token', {
+      params: {
+        client_id: META_APP_ID,
+        client_secret: META_APP_SECRET,
+        redirect_uri: REDIRECT_URI,
+        code: code
+      }
+    });
+
+    const accessToken = tokenResponse.data.access_token;
+    const userId = tokenResponse.data.user_id;
+
+    console.log('Access token obtained for user:', userId);
+
+    // Get user info
+    const userResponse = await axios.get(`https://graph.instagram.com/v18.0/${userId}`, {
+      params: {
+        fields: 'id,name,email',
+        access_token: accessToken
+      }
+    });
+
+    res.json({
+      success: true,
+      accessToken: accessToken,
+      user: {
+        id: userResponse.data.id,
+        name: userResponse.data.name,
+        email: userResponse.data.email
+      }
+    });
+  } catch (error) {
+    console.error('OAuth callback error:', error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error_description || error.message
+    });
+  }
+});
+
+// Fetch campaigns using Meta access token + Claude + Meta MCP
+const fetchCampaignsWithToken = async (adAccountId, accessToken) => {
+  try {
+    // Use Claude to fetch campaigns via Meta MCP with the user's access token
+    const prompt = `You have access to Meta Ads Manager through the Meta Ads MCP server.
+
+The user has provided their Meta access token: ${accessToken}
+
+Please fetch all campaigns for ad account ID: ${adAccountId}
 
 Use the ads_get_ad_entities tool with these parameters:
 - entity_type: "CAMPAIGN"
@@ -47,7 +120,6 @@ If error occurs, return:
   "error": "error message",
   "data": []
 }`;
-    }
 
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
@@ -71,19 +143,17 @@ If error occurs, return:
       {
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': process.env.CLAUDE_API_KEY,
+          'x-api-key': CLAUDE_API_KEY,
           'anthropic-version': '2023-06-01'
         }
       }
     );
 
-    // Extract response from Claude
     const content = response.data.content[0]?.text;
     if (!content) {
       throw new Error('No response from Claude');
     }
 
-    // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('Could not extract JSON from Claude response');
@@ -91,7 +161,7 @@ If error occurs, return:
 
     return JSON.parse(jsonMatch[0]);
   } catch (error) {
-    console.error('Error fetching from Meta via Claude:', error.message);
+    console.error('Error fetching campaigns:', error.message);
     return {
       success: false,
       error: error.message,
@@ -100,23 +170,21 @@ If error occurs, return:
   }
 };
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date(), message: 'Backend is running' });
-});
-
-// Fetch campaigns from any Meta ad account
-app.post('/api/fetch-campaigns', async (req, res) => {
+// Fetch campaigns endpoint (requires access token)
+app.post('/api/campaigns', async (req, res) => {
   try {
-    const { adAccountId } = req.body;
+    const { adAccountId, accessToken } = req.body;
 
-    if (!adAccountId) {
-      return res.status(400).json({ error: 'adAccountId is required', success: false });
+    if (!adAccountId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adAccountId and accessToken are required'
+      });
     }
 
     console.log(`Fetching campaigns for ad account: ${adAccountId}`);
 
-    const result = await fetchFromMetaViaClaude(adAccountId, 'campaigns');
+    const result = await fetchCampaignsWithToken(adAccountId, accessToken);
 
     res.json(result);
   } catch (error) {
@@ -129,16 +197,25 @@ app.post('/api/fetch-campaigns', async (req, res) => {
   }
 });
 
-// Test connection to Claude + Meta MCP
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date(),
+    message: 'Backend with Meta OAuth is running'
+  });
+});
+
+// Test Claude + Meta MCP connection
 app.get('/api/test-connection', async (req, res) => {
   try {
-    const testPrompt = `You have access to Meta Ads Manager. Please list the first 3 tools available to you from the Meta Ads MCP server. Return only a simple JSON list with tool names.`;
+    const testPrompt = 'You have access to Meta Ads Manager. Please confirm you can access Meta MCP by responding with just "OK".';
 
     const response = await axios.post(
       'https://api.anthropic.com/v1/messages',
       {
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
+        max_tokens: 100,
         messages: [
           {
             role: 'user',
@@ -156,18 +233,16 @@ app.get('/api/test-connection', async (req, res) => {
       {
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': process.env.CLAUDE_API_KEY,
+          'x-api-key': CLAUDE_API_KEY,
           'anthropic-version': '2023-06-01'
         }
       }
     );
 
-    const content = response.data.content[0]?.text;
-
     res.json({
       success: true,
       message: 'Claude + Meta MCP connection is working',
-      response: content
+      response: response.data.content[0]?.text
     });
   } catch (error) {
     console.error('Test connection error:', error.message);
@@ -179,7 +254,7 @@ app.get('/api/test-connection', async (req, res) => {
   }
 });
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error('Error:', err.stack);
   res.status(err.status || 500).json({ error: err.message, success: false });
@@ -188,10 +263,12 @@ app.use((err, req, res, next) => {
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`✅ Claude API Key: ${process.env.CLAUDE_API_KEY ? 'SET' : 'NOT SET'}`);
-  console.log(`✅ Meta MCP Server: https://mcp.facebook.com/ads`);
-  console.log(`📍 Health check: GET /api/health`);
-  console.log(`📍 Fetch campaigns: POST /api/fetch-campaigns (body: {adAccountId: "xxxxx"})`);
-  console.log(`📍 Test connection: GET /api/test-connection`);
+  console.log(`🚀 Backend with Meta OAuth running on port ${PORT}`);
+  console.log(`✅ Meta App ID: ${META_APP_ID}`);
+  console.log(`✅ Redirect URI: ${REDIRECT_URI}`);
+  console.log(`✅ Claude API Key: ${CLAUDE_API_KEY ? 'SET' : 'NOT SET'}`);
+  console.log(`📍 Login URL: GET /api/auth/login-url`);
+  console.log(`📍 OAuth Callback: POST /api/auth/callback`);
+  console.log(`📍 Fetch Campaigns: POST /api/campaigns`);
+  console.log(`📍 Test Connection: GET /api/test-connection`);
 });
