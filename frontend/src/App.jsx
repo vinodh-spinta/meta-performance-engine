@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, Sankey, Sink, Source, Link as SankeyLink } from 'recharts';
+import React, { useState } from 'react';
 
 const API_URL = 'https://meta-performance-engine-production.up.railway.app';
 
