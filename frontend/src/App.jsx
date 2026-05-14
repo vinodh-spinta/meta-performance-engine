@@ -6,28 +6,31 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loginUrl, setLoginUrl] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   // Campaigns state
   const [adAccountId, setAdAccountId] = useState('');
   const [campaigns, setCampaigns] = useState([]);
   const [fetchLoading, setFetchLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
-  // On component mount, check if we're in the OAuth callback
+  // On mount, check if we have OAuth code in URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
+    const error = params.get('error');
 
     if (code) {
+      console.log('OAuth code received, exchanging for token...');
       handleOAuthCallback(code);
+    } else if (error) {
+      setError(`OAuth Error: ${params.get('error_reason')}`);
     } else {
       // Get login URL
       fetchLoginUrl();
     }
   }, []);
 
-  // Fetch login URL from backend
   const fetchLoginUrl = async () => {
     try {
       const response = await fetch(`${API_URL}/api/auth/login-url`);
@@ -37,12 +40,13 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching login URL:', err);
+      setError('Failed to load login');
     }
   };
 
-  // Handle OAuth callback
   const handleOAuthCallback = async (code) => {
     setLoading(true);
+    setError('');
     try {
       const response = await fetch(`${API_URL}/api/auth/callback`, {
         method: 'POST',
@@ -59,13 +63,13 @@ export default function App() {
           accessToken: data.accessToken
         });
         setSuccess(`✅ Logged in as ${data.user.name}!`);
-        // Clean up URL
+        // Clean URL
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        setError(`Error: ${data.error}`);
+        setError(`Login failed: ${data.error}`);
       }
     } catch (err) {
-      setError(`Connection error: ${err.message}`);
+      setError(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -97,14 +101,13 @@ export default function App() {
 
       if (data.success) {
         setCampaigns(data.data || []);
-        setSuccess(`✅ Fetched ${data.data?.length || 0} campaigns from Meta`);
+        setSuccess(`✅ Fetched ${data.data?.length || 0} campaigns`);
       } else {
-        setError(`Error: ${data.error || 'Failed to fetch campaigns'}`);
+        setError(`Failed to fetch: ${data.error}`);
         setCampaigns([]);
       }
     } catch (err) {
-      setError(`Connection error: ${err.message}`);
-      setCampaigns([]);
+      setError(`Error: ${err.message}`);
     } finally {
       setFetchLoading(false);
     }
@@ -145,12 +148,26 @@ export default function App() {
             Engine
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 32px', lineHeight: '1.6' }}>
-            Real-time Meta Ads analytics powered by Claude AI + Meta MCP. Secure OAuth login with your Meta account.
+            Real-time Meta Ads analytics. Secure OAuth login with your Meta account.
           </p>
+
+          {error && (
+            <div style={{
+              background: '#fee2e2',
+              border: '1px solid #fca5a5',
+              color: '#991b1b',
+              padding: '12px',
+              borderRadius: '6px',
+              marginBottom: '16px',
+              fontSize: '13px'
+            }}>
+              {error}
+            </div>
+          )}
 
           {loading ? (
             <div style={{ textAlign: 'center', padding: '20px' }}>
-              <p style={{ color: '#64748b' }}>Logging in...</p>
+              <p style={{ color: '#64748b' }}>Logging in with Meta...</p>
             </div>
           ) : loginUrl ? (
             <a
@@ -167,8 +184,7 @@ export default function App() {
                 cursor: 'pointer',
                 textAlign: 'center',
                 textDecoration: 'none',
-                fontSize: '14px',
-                marginBottom: '16px'
+                fontSize: '14px'
               }}
             >
               🔐 Login with Meta
@@ -188,7 +204,7 @@ export default function App() {
                 fontSize: '14px'
               }}
             >
-              Start Login
+              Initialize Login
             </button>
           )}
 
@@ -198,7 +214,7 @@ export default function App() {
             textAlign: 'center',
             margin: '24px 0 0'
           }}>
-            Your Meta account login is secure and encrypted. We only access your ad account data.
+            Secure • OAuth Encrypted • Your data is protected
           </p>
         </div>
       </div>
@@ -229,7 +245,7 @@ export default function App() {
               Meta Performance Engine
             </h1>
             <p style={{ fontSize: '14px', color: '#94a3b8', margin: '8px 0 0' }}>
-              Welcome, <strong>{user.name}</strong> | Real-time campaign data via Claude + Meta MCP
+              Welcome, <strong>{user.name}</strong>
             </p>
           </div>
           <button
@@ -294,7 +310,7 @@ export default function App() {
               type="text"
               value={adAccountId}
               onChange={(e) => setAdAccountId(e.target.value)}
-              placeholder="Enter Meta Ad Account ID (e.g., 690235150132517)"
+              placeholder="Enter Ad Account ID (e.g., 690235150132517)"
               style={{
                 flex: 1,
                 padding: '12px',
@@ -323,14 +339,6 @@ export default function App() {
               {fetchLoading ? 'Fetching...' : 'Fetch Campaigns'}
             </button>
           </form>
-          <p style={{
-            fontSize: '12px',
-            color: '#94a3b8',
-            margin: '12px 0 0',
-            lineHeight: '1.5'
-          }}>
-            💡 Enter your Meta ad account ID to fetch all campaigns. Data is fetched securely using your authenticated Meta account.
-          </p>
         </div>
 
         {/* Campaigns Table */}
@@ -353,97 +361,41 @@ export default function App() {
               }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #334155' }}>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      color: '#94a3b8',
-                      fontWeight: '600',
-                      fontSize: '12px'
-                    }}>
-                      Campaign Name
-                    </th>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      color: '#94a3b8',
-                      fontWeight: '600',
-                      fontSize: '12px'
-                    }}>
-                      Objective
-                    </th>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      color: '#94a3b8',
-                      fontWeight: '600',
-                      fontSize: '12px'
-                    }}>
-                      Status
-                    </th>
-                    <th style={{
-                      textAlign: 'left',
-                      padding: '12px',
-                      color: '#94a3b8',
-                      fontWeight: '600',
-                      fontSize: '12px'
-                    }}>
-                      Campaign ID
-                    </th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>Name</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>Objective</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>Status</th>
+                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>ID</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {campaigns.map((campaign) => (
-                    <tr key={campaign.id} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ padding: '12px', color: '#e2e8f0' }}>
-                        {campaign.name}
-                      </td>
-                      <td style={{ padding: '12px', color: '#cbd5e1' }}>
-                        {campaign.objective || 'N/A'}
-                      </td>
-                      <td style={{
-                        padding: '12px',
-                        color: campaign.status === 'ACTIVE' ? '#86efac' : '#fca5a5'
-                      }}>
+                  {campaigns.map((c) => (
+                    <tr key={c.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '12px', color: '#e2e8f0' }}>{c.name}</td>
+                      <td style={{ padding: '12px', color: '#cbd5e1' }}>{c.objective || 'N/A'}</td>
+                      <td style={{ padding: '12px', color: c.status === 'ACTIVE' ? '#86efac' : '#fca5a5' }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '4px 8px',
                           borderRadius: '4px',
                           fontSize: '12px',
-                          background: campaign.status === 'ACTIVE' ? '#1e3a1f' : '#7f1d1d',
-                          border: campaign.status === 'ACTIVE' ? '1px solid #22c55e' : '1px solid #dc2626'
+                          background: c.status === 'ACTIVE' ? '#1e3a1f' : '#7f1d1d',
+                          border: c.status === 'ACTIVE' ? '1px solid #22c55e' : '1px solid #dc2626'
                         }}>
-                          {campaign.status}
+                          {c.status}
                         </span>
                       </td>
-                      <td style={{
-                        padding: '12px',
-                        color: '#64748b',
-                        fontSize: '12px',
-                        fontFamily: 'monospace'
-                      }}>
-                        {campaign.id}
-                      </td>
+                      <td style={{ padding: '12px', color: '#64748b', fontSize: '11px' }}>{c.id}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px 0', margin: 0 }}>
-              {fetchLoading ? 'Loading campaigns...' : 'No campaigns fetched yet. Enter an account ID and click "Fetch Campaigns".'}
+            <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px', margin: 0 }}>
+              {fetchLoading ? 'Loading...' : 'Enter account ID and fetch campaigns'}
             </p>
           )}
         </div>
-
-        {/* Footer */}
-        <p style={{
-          fontSize: '12px',
-          color: '#64748b',
-          textAlign: 'center',
-          margin: '40px 0 0'
-        }}>
-          Secure • Encrypted • OAuth Authenticated | Backend: {API_URL}
-        </p>
       </div>
     </div>
   );
