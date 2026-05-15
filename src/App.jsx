@@ -39,16 +39,6 @@ export default function App() {
     return symbols[currency] || currency;
   };
 
-  const isEcommerceCampaign = (objective) => {
-    const ecommerceObjectives = ['SALES', 'PRODUCT_CATALOG_SALES', 'CONVERSIONS'];
-    return ecommerceObjectives.includes(objective);
-  };
-
-  const isLeadGenCampaign = (objective) => {
-    const leadObjectives = ['LEAD_GENERATION', 'MESSAGES'];
-    return leadObjectives.includes(objective);
-  };
-
   const getPerformanceColor = (roas) => {
     const roasValue = parseFloat(roas) || 0;
     if (roasValue >= 2) return '#10b981'; // Green - Good
