@@ -121,6 +121,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     let filtered = campaigns;
 
     // Filter active campaigns
