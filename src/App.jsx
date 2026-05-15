@@ -120,7 +120,7 @@ export default function App() {
     return sorted;
   };
 
-  const applyFiltersAndSort = (campaignsToFilter) => {
+  const applyFiltersAndSort = React.useCallback((campaignsToFilter) => {
     let filtered = campaignsToFilter;
 
     // Filter active campaigns
@@ -132,11 +132,11 @@ export default function App() {
     filtered = sortCampaigns(filtered);
 
     setFilteredCampaigns(filtered);
-  };
+  }, [showActiveOnly, sortBy, campaignMetrics]);
 
   useEffect(() => {
     applyFiltersAndSort(campaigns);
-  }, [campaigns, showActiveOnly, sortBy, campaignMetrics, applyFiltersAndSort]);
+  }, [campaigns, applyFiltersAndSort]);
 
   const fetchCampaigns = async (accountId, token) => {
     setLoading(true);
