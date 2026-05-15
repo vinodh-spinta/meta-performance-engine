@@ -21,7 +21,7 @@ export default function App() {
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showActiveOnly, setShowActiveOnly] = useState(false);
-  const [sortBy, setSortBy] = useState('name'); // name, roas, purchases, spend, impressions
+  const [sortBy, setSortBy] = useState('roas');
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
@@ -40,31 +40,36 @@ export default function App() {
   };
 
   const isEcommerceCampaign = (objective) => {
-    const ecommerceObjectives = [
-      'SALES',
-      'PRODUCT_CATALOG_SALES',
-      'CONVERSIONS'
-    ];
+    const ecommerceObjectives = ['SALES', 'PRODUCT_CATALOG_SALES', 'CONVERSIONS'];
     return ecommerceObjectives.includes(objective);
   };
 
   const isLeadGenCampaign = (objective) => {
-    const leadObjectives = [
-      'LEAD_GENERATION',
-      'MESSAGES'
-    ];
+    const leadObjectives = ['LEAD_GENERATION', 'MESSAGES'];
     return leadObjectives.includes(objective);
+  };
+
+  const getPerformanceColor = (roas) => {
+    const roasValue = parseFloat(roas) || 0;
+    if (roasValue >= 2) return '#10b981'; // Green - Good
+    if (roasValue >= 1) return '#f59e0b'; // Yellow - Medium
+    return '#ef4444'; // Red - Poor
+  };
+
+  const getPerformanceLabel = (roas) => {
+    const roasValue = parseFloat(roas) || 0;
+    if (roasValue >= 2) return 'Excellent';
+    if (roasValue >= 1) return 'Good';
+    if (roasValue > 0) return 'Poor';
+    return 'No Data';
   };
 
   const getDateRange = (preset) => {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    
     const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
-
     const formatDate = (date) => date.toISOString().split('T')[0];
 
     const ranges = {
@@ -124,14 +129,11 @@ export default function App() {
   useEffect(() => {
     let filtered = campaigns;
 
-    // Filter active campaigns
     if (showActiveOnly) {
       filtered = filtered.filter(c => c.status === 'ACTIVE');
     }
 
-    // Apply sorting
     filtered = sortCampaigns(filtered);
-
     setFilteredCampaigns(filtered);
   }, [campaigns, showActiveOnly, sortBy, campaignMetrics]);
   /* eslint-enable react-hooks/exhaustive-deps */
@@ -305,7 +307,7 @@ export default function App() {
     setCampaignMetrics({});
     setExpandedCampaign(null);
     setShowActiveOnly(false);
-    setSortBy('name');
+    setSortBy('roas');
     if (accessToken) {
       fetchCampaigns(accountId, accessToken);
     }
@@ -336,7 +338,7 @@ export default function App() {
     setError('');
     setSuccess('');
     setShowActiveOnly(false);
-    setSortBy('name');
+    setSortBy('roas');
   };
 
   const formatCurrency = (value) => {
@@ -347,17 +349,30 @@ export default function App() {
     return parseInt(value || 0).toLocaleString();
   };
 
-  const renderMetricCard = (label, value, color, unit = '') => {
-    return (
-      <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-        <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-          {label}
-        </p>
-        <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: color }}>
-          {value}{unit}
-        </p>
-      </div>
-    );
+  // Calculate summary metrics
+  const calculateSummary = () => {
+    let totalSpend = 0;
+    let totalImpressions = 0;
+    let totalPurchases = 0;
+    let totalPurchaseValue = 0;
+    let activeCampaignsCount = 0;
+
+    filteredCampaigns.forEach(campaign => {
+      if (campaignMetrics[campaign.id]) {
+        const metrics = campaignMetrics[campaign.id];
+        totalSpend += parseFloat(metrics.spend || 0);
+        totalImpressions += parseInt(metrics.impressions || 0);
+        totalPurchases += parseInt(metrics.purchases || 0);
+        totalPurchaseValue += parseFloat(metrics.purchaseValue || 0);
+      }
+      if (campaign.status === 'ACTIVE') {
+        activeCampaignsCount++;
+      }
+    });
+
+    const avgROAS = totalSpend > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
+
+    return { totalSpend, totalImpressions, totalPurchases, totalPurchaseValue, avgROAS, activeCampaignsCount };
   };
 
   if (!loggedIn) {
@@ -387,7 +402,7 @@ export default function App() {
             Engine
           </h2>
           <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 32px', lineHeight: '1.6' }}>
-            Real-time Meta Ads analytics for Spinta Digital. Securely connect with your Meta account to view all your ad accounts and campaigns.
+            Real-time Meta Ads analytics for Spinta Digital. Securely connect with your Meta account.
           </p>
 
           <button
@@ -424,29 +439,32 @@ export default function App() {
     );
   }
 
+  const summary = calculateSummary();
+
   return (
     <div style={{
       background: '#0f172a',
       minHeight: '100vh',
       color: '#fff',
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      padding: '40px 20px'
+      padding: '24px 20px'
     }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+        {/* Header */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '40px',
-          borderBottom: '1px solid #334155',
-          paddingBottom: '20px'
+          marginBottom: '32px',
+          paddingBottom: '20px',
+          borderBottom: '1px solid #334155'
         }}>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: '700', margin: 0 }}>
-              Meta Performance Engine
+            <h1 style={{ fontSize: '28px', fontWeight: '700', margin: 0 }}>
+              📊 Meta Performance Engine
             </h1>
-            <p style={{ fontSize: '14px', color: '#94a3b8', margin: '8px 0 0' }}>
-              Real-time Meta Ads Campaign Analytics
+            <p style={{ fontSize: '13px', color: '#94a3b8', margin: '4px 0 0' }}>
+              Real-time analytics for {selectedAccount ? adAccounts.find(a => a.id === selectedAccount)?.name : 'your campaigns'}
             </p>
           </div>
           <button
@@ -494,25 +512,26 @@ export default function App() {
           </div>
         )}
 
+        {/* Account Selector */}
         <div style={{
           background: '#1e293b',
           borderRadius: '8px',
-          padding: '24px',
+          padding: '16px',
           border: '1px solid #334155',
-          marginBottom: '32px'
+          marginBottom: '24px'
         }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px' }}>
+          <label style={{ fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600', display: 'block', marginBottom: '8px' }}>
             Select Ad Account
-          </h2>
+          </label>
           <select
             value={selectedAccount}
             onChange={handleAccountChange}
             style={{
               width: '100%',
-              padding: '12px',
+              padding: '10px 12px',
               background: '#0f172a',
               border: '1px solid #334155',
-              borderRadius: '8px',
+              borderRadius: '6px',
               color: '#e2e8f0',
               fontSize: '14px',
               cursor: 'pointer'
@@ -521,373 +540,455 @@ export default function App() {
             <option value="">Choose an ad account...</option>
             {adAccounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name} ({account.currency || 'USD'}) - {account.business_name || 'N/A'}
+                {account.name} ({account.currency || 'USD'})
               </option>
             ))}
           </select>
-          <p style={{
-            fontSize: '12px',
-            color: '#94a3b8',
-            margin: '12px 0 0',
-            lineHeight: '1.5'
-          }}>
-            💡 Select an ad account to view its campaigns and performance metrics.
-          </p>
         </div>
 
-        <div style={{
-          background: '#1e293b',
-          borderRadius: '8px',
-          padding: '24px',
-          border: '1px solid #334155'
-        }}>
+        {/* Summary Dashboard */}
+        {campaigns.length > 0 && (
           <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '16px',
-            flexWrap: 'wrap',
-            gap: '16px'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '16px',
+            marginBottom: '32px'
           }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
-              Campaigns ({filteredCampaigns.length} of {campaigns.length})
-            </h2>
-            {campaigns.length > 0 && (
-              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={showActiveOnly}
-                    onChange={(e) => setShowActiveOnly(e.target.checked)}
-                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
-                  />
-                  <span>Active Only</span>
-                </label>
-
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  style={{
-                    padding: '6px 12px',
-                    background: '#0f172a',
-                    border: '1px solid #334155',
-                    borderRadius: '4px',
-                    color: '#e2e8f0',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  <option value="name">Sort by Name</option>
-                  <option value="roas">Sort by ROAS ⭐</option>
-                  <option value="purchases">Sort by Purchases</option>
-                  <option value="spend">Sort by Spend</option>
-                  <option value="impressions">Sort by Impressions</option>
-                </select>
-              </div>
-            )}
-          </div>
-
-          {expandedCampaign && (
             <div style={{
-              display: 'flex',
-              gap: '8px',
-              flexWrap: 'wrap',
-              marginBottom: '16px',
-              padding: '12px',
-              background: '#0f172a',
-              borderRadius: '8px'
-            }}>
-              <button
-                onClick={() => handleDatePresetChange('today')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === 'today' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => handleDatePresetChange('yesterday')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === 'yesterday' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                Yesterday
-              </button>
-              <button
-                onClick={() => handleDatePresetChange('mtd')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === 'mtd' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                MTD
-              </button>
-              <button
-                onClick={() => handleDatePresetChange('qtd')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === 'qtd' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                QTD
-              </button>
-              <button
-                onClick={() => handleDatePresetChange('7')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === '7' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                7D
-              </button>
-              <button
-                onClick={() => handleDatePresetChange('30')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === '30' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                30D
-              </button>
-              <button
-                onClick={() => handleDatePresetChange('90')}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === '90' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                90D
-              </button>
-              <button
-                onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
-                style={{
-                  padding: '6px 12px',
-                  background: dateRange === 'custom' ? '#3b82f6' : '#334155',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#e2e8f0',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}
-              >
-                📅 Custom
-              </button>
-            </div>
-          )}
-
-          {showCustomDatePicker && (
-            <div style={{
-              background: '#0f172a',
-              padding: '16px',
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid #334155',
               borderRadius: '8px',
-              marginBottom: '16px',
-              display: 'flex',
-              gap: '12px',
-              alignItems: 'flex-end',
-              flexWrap: 'wrap'
+              padding: '20px',
+              position: 'relative',
+              overflow: 'hidden'
             }}>
-              <div>
-                <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
-                  From
-                </label>
-                <input
-                  type="date"
-                  value={customDateStart}
-                  onChange={(e) => setCustomDateStart(e.target.value)}
-                  style={{
-                    padding: '8px',
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: '4px',
-                    color: '#e2e8f0',
-                    fontSize: '14px'
-                  }}
-                />
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>
+                  Total Spend
+                </p>
+                <p style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#3b82f6' }}>
+                  {formatCurrency(summary.totalSpend)}
+                </p>
+                <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+                  {filteredCampaigns.length} campaigns
+                </p>
               </div>
-              <div>
-                <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
-                  To
-                </label>
-                <input
-                  type="date"
-                  value={customDateEnd}
-                  onChange={(e) => setCustomDateEnd(e.target.value)}
-                  style={{
-                    padding: '8px',
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: '4px',
-                    color: '#e2e8f0',
-                    fontSize: '14px'
-                  }}
-                />
+              <div style={{
+                position: 'absolute',
+                top: '-20px',
+                right: '-20px',
+                fontSize: '80px',
+                opacity: 0.1,
+                color: '#3b82f6'
+              }}>
+                💰
               </div>
-              <button
-                onClick={handleCustomDateApply}
-                style={{
-                  padding: '8px 16px',
-                  background: '#3b82f6',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: 'white',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '12px'
-                }}
-              >
-                Apply
-              </button>
             </div>
-          )}
 
-          {filteredCampaigns.length > 0 ? (
-            <div>
-              {filteredCampaigns.map((campaign) => (
-                <div key={campaign.id} style={{ marginBottom: '12px' }}>
-                  <div
-                    onClick={() => handleCampaignClick(campaign)}
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              padding: '20px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>
+                  Total Impressions
+                </p>
+                <p style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#60a5fa' }}>
+                  {formatNumber(summary.totalImpressions)}
+                </p>
+                <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+                  Reach
+                </p>
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: '-20px',
+                right: '-20px',
+                fontSize: '80px',
+                opacity: 0.1,
+                color: '#60a5fa'
+              }}>
+                👁️
+              </div>
+            </div>
+
+            <div style={{
+              background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              padding: '20px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>
+                  Total Purchases
+                </p>
+                <p style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#10b981' }}>
+                  {formatNumber(summary.totalPurchases)}
+                </p>
+                <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+                  Conversions
+                </p>
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: '-20px',
+                right: '-20px',
+                fontSize: '80px',
+                opacity: 0.1,
+                color: '#10b981'
+              }}>
+                🛒
+              </div>
+            </div>
+
+            <div style={{
+              background: 'linear-gradient(135deg, #292c1e 0%, #1e293b 100%)',
+              border: '2px solid #fbbf24',
+              borderRadius: '8px',
+              padding: '20px',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '600' }}>
+                  Avg ROAS
+                </p>
+                <p style={{ margin: 0, fontSize: '24px', fontWeight: '700', color: '#fbbf24' }}>
+                  {summary.avgROAS}x
+                </p>
+                <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+                  Return on Ad Spend
+                </p>
+              </div>
+              <div style={{
+                position: 'absolute',
+                top: '-20px',
+                right: '-20px',
+                fontSize: '80px',
+                opacity: 0.1,
+                color: '#fbbf24'
+              }}>
+                ⭐
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Controls */}
+        {campaigns.length > 0 && (
+          <div style={{
+            background: '#1e293b',
+            borderRadius: '8px',
+            padding: '16px',
+            border: '1px solid #334155',
+            marginBottom: '24px',
+            display: 'flex',
+            gap: '12px',
+            flexWrap: 'wrap',
+            alignItems: 'center'
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={showActiveOnly}
+                onChange={(e) => setShowActiveOnly(e.target.checked)}
+                style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+              />
+              <span>Active Only</span>
+            </label>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                background: '#0f172a',
+                border: '1px solid #334155',
+                borderRadius: '6px',
+                color: '#e2e8f0',
+                cursor: 'pointer',
+                fontSize: '13px'
+              }}
+            >
+              <option value="roas">Sort: ROAS ⭐</option>
+              <option value="purchases">Sort: Purchases</option>
+              <option value="spend">Sort: Spend</option>
+              <option value="impressions">Sort: Impressions</option>
+              <option value="name">Sort: Name</option>
+            </select>
+
+            {expandedCampaign && (
+              <>
+                <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                  {['today', 'yesterday', 'mtd', 'qtd', '7', '30', '90'].map(preset => (
+                    <button
+                      key={preset}
+                      onClick={() => handleDatePresetChange(preset)}
+                      style={{
+                        padding: '6px 12px',
+                        background: dateRange === preset ? '#3b82f6' : '#334155',
+                        border: 'none',
+                        borderRadius: '4px',
+                        color: '#e2e8f0',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: '600'
+                      }}
+                    >
+                      {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'mtd' ? 'MTD' : preset === 'qtd' ? 'QTD' : preset + 'D'}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
                     style={{
-                      background: expandedCampaign === campaign.id ? '#0f172a' : '#334155',
-                      padding: '16px',
-                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      background: dateRange === 'custom' ? '#3b82f6' : '#334155',
+                      border: 'none',
+                      borderRadius: '4px',
+                      color: '#e2e8f0',
                       cursor: 'pointer',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      border: expandedCampaign === campaign.id ? '1px solid #3b82f6' : '1px solid #334155',
-                      transition: 'all 0.3s'
+                      fontSize: '12px',
+                      fontWeight: '600'
                     }}
                   >
-                    <div style={{ flex: 1 }}>
-                      <h3 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: '600', color: '#e2e8f0' }}>
-                        {campaign.name}
-                      </h3>
-                      <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
-                        {campaign.objective} • {campaign.status}
-                        {campaignMetrics[campaign.id]?.roas && (
-                          <span style={{ color: '#fbbf24', fontWeight: '700', marginLeft: '8px' }}>
-                            ROAS: {campaignMetrics[campaign.id].roas}x
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <span style={{
-                      fontSize: '20px',
-                      color: '#3b82f6',
-                      transform: expandedCampaign === campaign.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.3s'
-                    }}>
-                      ▼
-                    </span>
-                  </div>
-
-                  {expandedCampaign === campaign.id && (
-                    <div style={{
-                      background: '#0f172a',
-                      padding: '20px',
-                      borderRadius: '0 0 8px 8px',
-                      borderLeft: '1px solid #3b82f6',
-                      borderRight: '1px solid #3b82f6',
-                      borderBottom: '1px solid #3b82f6',
-                      marginTop: '-1px'
-                    }}>
-                      {metricsLoading ? (
-                        <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                          Loading metrics...
-                        </p>
-                      ) : campaignMetrics[campaign.id] ? (
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                          gap: '16px'
-                        }}>
-                          {renderMetricCard('Spend', formatCurrency(campaignMetrics[campaign.id].spend), '#22c55e')}
-                          {renderMetricCard('Impressions', formatNumber(campaignMetrics[campaign.id].impressions), '#60a5fa')}
-                          {renderMetricCard('Clicks', formatNumber(campaignMetrics[campaign.id].clicks), '#f59e0b')}
-                          {renderMetricCard('CTR', (campaignMetrics[campaign.id].ctr || 0).toFixed(2), '#a78bfa', '%')}
-                          {renderMetricCard('CPC', formatCurrency(campaignMetrics[campaign.id].cpc), '#ec4899')}
-
-                          {isEcommerceCampaign(campaign.objective) && (
-                            <>
-                              {renderMetricCard('Purchases', formatNumber(campaignMetrics[campaign.id].purchases), '#06b6d4')}
-                              {renderMetricCard('Purchase Value', formatCurrency(campaignMetrics[campaign.id].purchaseValue), '#10b981')}
-                              <div style={{ 
-                                background: '#1e293b', 
-                                padding: '12px', 
-                                borderRadius: '6px',
-                                border: '2px solid #fbbf24'
-                              }}>
-                                <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                                  ROAS ⭐
-                                </p>
-                                <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#fbbf24' }}>
-                                  {campaignMetrics[campaign.id].roas}x
-                                </p>
-                              </div>
-                            </>
-                          )}
-
-                          {isLeadGenCampaign(campaign.objective) && (
-                            <>
-                              {renderMetricCard('Leads', formatNumber(campaignMetrics[campaign.id].purchases), '#06b6d4')}
-                              {renderMetricCard('Cost Per Lead', formatCurrency(campaignMetrics[campaign.id].cpc), '#10b981')}
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
-                          No metrics available
-                        </p>
-                      )}
-                    </div>
-                  )}
+                    📅 Custom
+                  </button>
                 </div>
-              ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Custom Date Picker */}
+        {showCustomDatePicker && (
+          <div style={{
+            background: '#0f172a',
+            padding: '16px',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            display: 'flex',
+            gap: '12px',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap'
+          }}>
+            <div>
+              <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>From</label>
+              <input
+                type="date"
+                value={customDateStart}
+                onChange={(e) => setCustomDateStart(e.target.value)}
+                style={{
+                  padding: '8px',
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>To</label>
+              <input
+                type="date"
+                value={customDateEnd}
+                onChange={(e) => setCustomDateEnd(e.target.value)}
+                style={{
+                  padding: '8px',
+                  background: '#1e293b',
+                  border: '1px solid #334155',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <button
+              onClick={handleCustomDateApply}
+              style={{
+                padding: '8px 16px',
+                background: '#3b82f6',
+                border: 'none',
+                borderRadius: '4px',
+                color: 'white',
+                cursor: 'pointer',
+                fontWeight: '600',
+                fontSize: '12px'
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        )}
+
+        {/* Campaigns List */}
+        <div>
+          <h2 style={{ fontSize: '16px', fontWeight: '700', margin: '0 0 16px', color: '#e2e8f0' }}>
+            Campaigns ({filteredCampaigns.length} of {campaigns.length})
+          </h2>
+
+          {filteredCampaigns.length > 0 ? (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {filteredCampaigns.map((campaign) => {
+                const metrics = campaignMetrics[campaign.id];
+                const roas = metrics?.roas || 0;
+                const performanceColor = getPerformanceColor(roas);
+                const performanceLabel = getPerformanceLabel(roas);
+
+                return (
+                  <div key={campaign.id}>
+                    <div
+                      onClick={() => handleCampaignClick(campaign)}
+                      style={{
+                        background: expandedCampaign === campaign.id ? '#0f172a' : '#1e293b',
+                        border: expandedCampaign === campaign.id ? '2px solid #3b82f6' : '1px solid #334155',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        transition: 'all 0.3s'
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#e2e8f0' }}>
+                            {campaign.name}
+                          </h3>
+                          <span style={{
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            background: campaign.status === 'ACTIVE' ? '#1e3a1f' : '#3f3f3f',
+                            border: campaign.status === 'ACTIVE' ? '1px solid #22c55e' : '1px solid #666',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            color: campaign.status === 'ACTIVE' ? '#86efac' : '#a3a3a3'
+                          }}>
+                            {campaign.status}
+                          </span>
+                        </div>
+
+                        {metrics && (
+                          <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                            <div>
+                              <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#94a3b8' }}>Spend</p>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#3b82f6' }}>
+                                {formatCurrency(metrics.spend)}
+                              </p>
+                            </div>
+                            <div>
+                              <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#94a3b8' }}>Impressions</p>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#60a5fa' }}>
+                                {formatNumber(metrics.impressions)}
+                              </p>
+                            </div>
+                            <div>
+                              <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#94a3b8' }}>Purchases</p>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#10b981' }}>
+                                {formatNumber(metrics.purchases)}
+                              </p>
+                            </div>
+                            <div>
+                              <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#94a3b8' }}>ROAS</p>
+                              <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: performanceColor }}>
+                                {roas}x
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#64748b' }}>
+                          {campaign.objective} • {metrics ? `Performance: ${performanceLabel}` : 'Click to load metrics'}
+                        </p>
+                      </div>
+
+                      <span style={{
+                        fontSize: '20px',
+                        color: '#3b82f6',
+                        transform: expandedCampaign === campaign.id ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.3s'
+                      }}>
+                        ▼
+                      </span>
+                    </div>
+
+                    {expandedCampaign === campaign.id && (
+                      <div style={{
+                        background: '#0f172a',
+                        padding: '20px',
+                        borderRadius: '0 0 8px 8px',
+                        borderLeft: '2px solid #3b82f6',
+                        borderRight: '2px solid #3b82f6',
+                        borderBottom: '2px solid #3b82f6',
+                        marginTop: '-1px'
+                      }}>
+                        {metricsLoading ? (
+                          <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                            Loading detailed metrics...
+                          </p>
+                        ) : metrics ? (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                            gap: '16px'
+                          }}>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Spend</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>
+                            </div>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Impressions</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#60a5fa' }}>{formatNumber(metrics.impressions)}</p>
+                            </div>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Clicks</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#f59e0b' }}>{formatNumber(metrics.clicks)}</p>
+                            </div>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>CTR</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#a78bfa' }}>{(metrics.ctr || 0).toFixed(2)}%</p>
+                            </div>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>CPC</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#ec4899' }}>{formatCurrency(metrics.cpc)}</p>
+                            </div>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Purchases</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#10b981' }}>{formatNumber(metrics.purchases)}</p>
+                            </div>
+                            <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Purchase Value</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#10b981' }}>{formatCurrency(metrics.purchaseValue)}</p>
+                            </div>
+                            <div style={{
+                              background: '#1e293b',
+                              padding: '12px',
+                              borderRadius: '6px',
+                              border: '2px solid ' + performanceColor
+                            }}>
+                              <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>ROAS</p>
+                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: performanceColor }}>{metrics.roas}x</p>
+                              <p style={{ margin: '4px 0 0', fontSize: '11px', color: performanceColor, fontWeight: '600' }}>{performanceLabel}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                            No metrics available
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px', margin: 0 }}>
@@ -902,7 +1003,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          🔐 Securely connected to Meta Ads Manager | Real-time data
+          🔐 Securely connected to Meta Ads Manager | Real-time data | Last updated: {new Date().toLocaleTimeString()}
         </p>
       </div>
     </div>
