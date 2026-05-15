@@ -34,7 +34,7 @@ app.get('/api/health', (req, res) => {
 
 // Step 1: Generate OAuth login URL
 app.get('/api/auth/login-url', (req, res) => {
-  const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=ads_management,read_insights,business_management&state=random_state_string`;
+  const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=ads_management,ads_read,business_management&state=random_state_string`;
 
   res.json({
     success: true,
@@ -60,7 +60,7 @@ app.get('/api/auth/callback', async (req, res) => {
 
     // Exchange code for access token
     const tokenResponse = await axios.post(
-      'https://graph.instagram.com/v18.0/oauth/access_token',
+      'https://graph.facebook.com/v18.0/oauth/access_token',
       {
         client_id: META_APP_ID,
         client_secret: META_APP_SECRET,
@@ -96,7 +96,7 @@ app.post('/api/ad-accounts', async (req, res) => {
 
     // Fetch ad accounts
     const accountsResponse = await axios.get(
-      'https://graph.instagram.com/v18.0/me/adaccounts',
+      'https://graph.facebook.com/v18.0/me/adaccounts',
       {
         params: {
           fields: 'id,name,account_id,business_name',
@@ -142,7 +142,7 @@ app.post('/api/campaigns', async (req, res) => {
 
     // Fetch campaigns
     const campaignsResponse = await axios.get(
-      `https://graph.instagram.com/v18.0/act_${adAccountId}/campaigns`,
+      `https://graph.facebook.com/v18.0/act_${adAccountId}/campaigns`,
       {
         params: {
           fields: 'id,name,objective,status,created_time,updated_time',
@@ -187,7 +187,7 @@ app.post('/api/ad-sets', async (req, res) => {
     console.log(`📊 Fetching ad sets for campaign: ${campaignId}`);
 
     const adSetsResponse = await axios.get(
-      `https://graph.instagram.com/v18.0/${campaignId}/adsets`,
+      `https://graph.facebook.com/v18.0/${campaignId}/adsets`,
       {
         params: {
           fields: 'id,name,status,created_time',
