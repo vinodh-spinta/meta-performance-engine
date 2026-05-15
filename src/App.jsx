@@ -56,16 +56,6 @@ export default function App() {
     return leadObjectives.includes(objective);
   };
 
-  const getMetricsToDisplay = (objective) => {
-    if (isEcommerceCampaign(objective)) {
-      return ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'purchases', 'purchaseValue', 'roas'];
-    } else if (isLeadGenCampaign(objective)) {
-      return ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'leads', 'cpl'];
-    } else {
-      return ['spend', 'impressions', 'clicks', 'ctr', 'cpc'];
-    }
-  };
-
   const getDateRange = (preset) => {
     const today = new Date();
     const yesterday = new Date(today);
@@ -146,7 +136,7 @@ export default function App() {
 
   useEffect(() => {
     applyFiltersAndSort(campaigns);
-  }, [campaigns, showActiveOnly, sortBy, campaignMetrics]);
+  }, [campaigns, showActiveOnly, sortBy, campaignMetrics, applyFiltersAndSort]);
 
   const fetchCampaigns = async (accountId, token) => {
     setLoading(true);
