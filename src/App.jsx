@@ -18,10 +18,13 @@ export default function App() {
     setSuccess('');
 
     try {
+      // Remove 'act_' prefix if present
+      const cleanAccountId = accountId.replace('act_', '');
+      
       const response = await fetch(`${API_URL}/api/campaigns`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adAccountId: accountId, accessToken: token })
+        body: JSON.stringify({ adAccountId: cleanAccountId, accessToken: token })
       });
 
       const data = await response.json();
@@ -57,7 +60,8 @@ export default function App() {
         setSuccess(`✅ Found ${data.count} ad accounts!`);
         if (data.data && data.data.length > 0) {
           setSelectedAccount(data.data[0].id);
-          fetchCampaigns(data.data[0].id, token);
+          // Remove 'act_' prefix when fetching campaigns
+          fetchCampaigns(data.data[0].id.replace('act_', ''), token);
         }
       } else {
         setError(`Failed: ${data.error}`);
