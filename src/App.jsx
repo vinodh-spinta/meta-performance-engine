@@ -7,14 +7,146 @@ export default function App() {
   const [accessToken, setAccessToken] = useState('');
   const [adAccounts, setAdAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState('');
+  const [selectedAccountCurrency, setSelectedAccountCurrency] = useState('USD');
   const [campaigns, setCampaigns] = useState([]);
+  const [filteredCampaigns, setFilteredCampaigns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [expandedCampaign, setExpandedCampaign] = useState(null);
   const [campaignMetrics, setCampaignMetrics] = useState({});
   const [metricsLoading, setMetricsLoading] = useState(false);
-  const [dateRange, setDateRange] = useState('30'); // 7, 30, 90 days
+  const [dateRange, setDateRange] = useState('30');
+  const [customDateStart, setCustomDateStart] = useState('');
+  const [customDateEnd, setCustomDateEnd] = useState('');
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [showActiveOnly, setShowActiveOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('name'); // name, roas, purchases, spend, impressions
+
+  const getCurrencySymbol = (currency) => {
+    const symbols = {
+      'USD': '$',
+      'INR': '₹',
+      'EUR': '€',
+      'GBP': '£',
+      'AUD': 'A$',
+      'CAD': 'C$',
+      'JPY': '¥',
+      'SGD': 'S$',
+      'HKD': 'HK$',
+      'NZD': 'NZ$'
+    };
+    return symbols[currency] || currency;
+  };
+
+  const isEcommerceCampaign = (objective) => {
+    const ecommerceObjectives = [
+      'SALES',
+      'PRODUCT_CATALOG_SALES',
+      'CONVERSIONS'
+    ];
+    return ecommerceObjectives.includes(objective);
+  };
+
+  const isLeadGenCampaign = (objective) => {
+    const leadObjectives = [
+      'LEAD_GENERATION',
+      'MESSAGES'
+    ];
+    return leadObjectives.includes(objective);
+  };
+
+  const getMetricsToDisplay = (objective) => {
+    if (isEcommerceCampaign(objective)) {
+      return ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'purchases', 'purchaseValue', 'roas'];
+    } else if (isLeadGenCampaign(objective)) {
+      return ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'leads', 'cpl'];
+    } else {
+      return ['spend', 'impressions', 'clicks', 'ctr', 'cpc'];
+    }
+  };
+
+  const getDateRange = (preset) => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
+
+    const formatDate = (date) => date.toISOString().split('T')[0];
+
+    const ranges = {
+      'today': { start: formatDate(today), end: formatDate(today) },
+      'yesterday': { start: formatDate(yesterday), end: formatDate(yesterday) },
+      'mtd': { start: formatDate(monthStart), end: formatDate(today) },
+      'qtd': { start: formatDate(quarterStart), end: formatDate(today) },
+      '7': { days: 7 },
+      '30': { days: 30 },
+      '90': { days: 90 }
+    };
+
+    return ranges[preset];
+  };
+
+  const sortCampaigns = (campaignsToSort) => {
+    const sorted = [...campaignsToSort];
+
+    switch (sortBy) {
+      case 'roas':
+        sorted.sort((a, b) => {
+          const roasA = campaignMetrics[a.id]?.roas || 0;
+          const roasB = campaignMetrics[b.id]?.roas || 0;
+          return parseFloat(roasB) - parseFloat(roasA);
+        });
+        break;
+      case 'purchases':
+        sorted.sort((a, b) => {
+          const purchasesA = campaignMetrics[a.id]?.purchases || 0;
+          const purchasesB = campaignMetrics[b.id]?.purchases || 0;
+          return purchasesB - purchasesA;
+        });
+        break;
+      case 'spend':
+        sorted.sort((a, b) => {
+          const spendA = campaignMetrics[a.id]?.spend || 0;
+          const spendB = campaignMetrics[b.id]?.spend || 0;
+          return parseFloat(spendB) - parseFloat(spendA);
+        });
+        break;
+      case 'impressions':
+        sorted.sort((a, b) => {
+          const impA = campaignMetrics[a.id]?.impressions || 0;
+          const impB = campaignMetrics[b.id]?.impressions || 0;
+          return impB - impA;
+        });
+        break;
+      case 'name':
+      default:
+        sorted.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    return sorted;
+  };
+
+  const applyFiltersAndSort = (campaignsToFilter) => {
+    let filtered = campaignsToFilter;
+
+    // Filter active campaigns
+    if (showActiveOnly) {
+      filtered = filtered.filter(c => c.status === 'ACTIVE');
+    }
+
+    // Apply sorting
+    filtered = sortCampaigns(filtered);
+
+    setFilteredCampaigns(filtered);
+  };
+
+  useEffect(() => {
+    applyFiltersAndSort(campaigns);
+  }, [campaigns, showActiveOnly, sortBy, campaignMetrics]);
 
   const fetchCampaigns = async (accountId, token) => {
     setLoading(true);
@@ -22,7 +154,6 @@ export default function App() {
     setSuccess('');
 
     try {
-      // Remove 'act_' prefix if present
       const cleanAccountId = accountId.replace('act_', '');
       
       const response = await fetch(`${API_URL}/api/campaigns`, {
@@ -35,6 +166,7 @@ export default function App() {
 
       if (data.success) {
         setCampaigns(data.data || []);
+        setCampaignMetrics({});
         setSuccess(`✅ Fetched ${data.count} campaigns!`);
       } else {
         setError(`Failed: ${data.error}`);
@@ -46,16 +178,10 @@ export default function App() {
     }
   };
 
-  const fetchCampaignMetrics = async (campaignId, token, days) => {
+  const fetchCampaignMetrics = async (campaignId, token, dateStart, dateEnd) => {
     setMetricsLoading(true);
 
     try {
-      // Calculate date range
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
-      const dateStart = startDate.toISOString().split('T')[0];
-      const dateEnd = endDate.toISOString().split('T')[0];
-
       const response = await fetch(`${API_URL}/api/campaign-insights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,15 +216,48 @@ export default function App() {
     } else {
       setExpandedCampaign(campaign.id);
       if (!campaignMetrics[campaign.id]) {
-        fetchCampaignMetrics(campaign.id, accessToken, parseInt(dateRange));
+        const range = getDateRange(dateRange);
+        let start, end;
+        if (range.days) {
+          const endDate = new Date();
+          const startDate = new Date(endDate.getTime() - range.days * 24 * 60 * 60 * 1000);
+          start = startDate.toISOString().split('T')[0];
+          end = endDate.toISOString().split('T')[0];
+        } else {
+          start = range.start;
+          end = range.end;
+        }
+        fetchCampaignMetrics(campaign.id, accessToken, start, end);
       }
     }
   };
 
-  const handleDateRangeChange = (days) => {
-    setDateRange(days);
+  const handleDatePresetChange = (preset) => {
+    setDateRange(preset);
+    setShowCustomDatePicker(false);
     if (expandedCampaign) {
-      fetchCampaignMetrics(expandedCampaign, accessToken, parseInt(days));
+      const range = getDateRange(preset);
+      let start, end;
+      if (range.days) {
+        const endDate = new Date();
+        const startDate = new Date(endDate.getTime() - range.days * 24 * 60 * 60 * 1000);
+        start = startDate.toISOString().split('T')[0];
+        end = endDate.toISOString().split('T')[0];
+      } else {
+        start = range.start;
+        end = range.end;
+      }
+      fetchCampaignMetrics(expandedCampaign, accessToken, start, end);
+    }
+  };
+
+  const handleCustomDateApply = () => {
+    if (customDateStart && customDateEnd) {
+      setDateRange('custom');
+      if (expandedCampaign) {
+        fetchCampaignMetrics(expandedCampaign, accessToken, customDateStart, customDateEnd);
+      }
+      setShowCustomDatePicker(false);
     }
   };
 
@@ -120,6 +279,7 @@ export default function App() {
         setSuccess(`✅ Found ${data.count} ad accounts!`);
         if (data.data && data.data.length > 0) {
           setSelectedAccount(data.data[0].id);
+          setSelectedAccountCurrency(data.data[0].currency || 'USD');
           fetchCampaigns(data.data[0].id.replace('act_', ''), token);
         }
       } else {
@@ -151,9 +311,13 @@ export default function App() {
 
   const handleAccountChange = (e) => {
     const accountId = e.target.value;
+    const account = adAccounts.find(a => a.id === accountId);
     setSelectedAccount(accountId);
+    setSelectedAccountCurrency(account?.currency || 'USD');
     setCampaignMetrics({});
     setExpandedCampaign(null);
+    setShowActiveOnly(false);
+    setSortBy('name');
     if (accessToken) {
       fetchCampaigns(accountId, accessToken);
     }
@@ -176,19 +340,36 @@ export default function App() {
     setAccessToken('');
     setAdAccounts([]);
     setSelectedAccount('');
+    setSelectedAccountCurrency('USD');
     setCampaigns([]);
+    setFilteredCampaigns([]);
     setCampaignMetrics({});
     setExpandedCampaign(null);
     setError('');
     setSuccess('');
+    setShowActiveOnly(false);
+    setSortBy('name');
   };
 
   const formatCurrency = (value) => {
-    return `$${parseFloat(value).toFixed(2)}`;
+    return `${getCurrencySymbol(selectedAccountCurrency)}${parseFloat(value).toFixed(2)}`;
   };
 
   const formatNumber = (value) => {
     return parseInt(value || 0).toLocaleString();
+  };
+
+  const renderMetricCard = (label, value, color, unit = '') => {
+    return (
+      <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+        <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+          {label}
+        </p>
+        <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: color }}>
+          {value}{unit}
+        </p>
+      </div>
+    );
   };
 
   if (!loggedIn) {
@@ -352,7 +533,7 @@ export default function App() {
             <option value="">Choose an ad account...</option>
             {adAccounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name} ({account.business_name || 'N/A'})
+                {account.name} ({account.currency || 'USD'}) - {account.business_name || 'N/A'}
               </option>
             ))}
           </select>
@@ -376,65 +557,249 @@ export default function App() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '16px'
+            marginBottom: '16px',
+            flexWrap: 'wrap',
+            gap: '16px'
           }}>
             <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
-              Campaigns ({campaigns.length})
+              Campaigns ({filteredCampaigns.length} of {campaigns.length})
             </h2>
-            {expandedCampaign && (
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => handleDateRangeChange('7')}
+            {campaigns.length > 0 && (
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showActiveOnly}
+                    onChange={(e) => setShowActiveOnly(e.target.checked)}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <span>Active Only</span>
+                </label>
+
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
                   style={{
                     padding: '6px 12px',
-                    background: dateRange === '7' ? '#3b82f6' : '#334155',
-                    border: 'none',
+                    background: '#0f172a',
+                    border: '1px solid #334155',
                     borderRadius: '4px',
                     color: '#e2e8f0',
                     cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '600'
+                    fontSize: '12px'
                   }}
                 >
-                  7D
-                </button>
-                <button
-                  onClick={() => handleDateRangeChange('30')}
-                  style={{
-                    padding: '6px 12px',
-                    background: dateRange === '30' ? '#3b82f6' : '#334155',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: '#e2e8f0',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '600'
-                  }}
-                >
-                  30D
-                </button>
-                <button
-                  onClick={() => handleDateRangeChange('90')}
-                  style={{
-                    padding: '6px 12px',
-                    background: dateRange === '90' ? '#3b82f6' : '#334155',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: '#e2e8f0',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '600'
-                  }}
-                >
-                  90D
-                </button>
+                  <option value="name">Sort by Name</option>
+                  <option value="roas">Sort by ROAS ⭐</option>
+                  <option value="purchases">Sort by Purchases</option>
+                  <option value="spend">Sort by Spend</option>
+                  <option value="impressions">Sort by Impressions</option>
+                </select>
               </div>
             )}
           </div>
 
-          {campaigns.length > 0 ? (
+          {expandedCampaign && (
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              flexWrap: 'wrap',
+              marginBottom: '16px',
+              padding: '12px',
+              background: '#0f172a',
+              borderRadius: '8px'
+            }}>
+              <button
+                onClick={() => handleDatePresetChange('today')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === 'today' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('yesterday')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === 'yesterday' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                Yesterday
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('mtd')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === 'mtd' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                MTD
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('qtd')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === 'qtd' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                QTD
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('7')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === '7' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                7D
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('30')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === '30' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                30D
+              </button>
+              <button
+                onClick={() => handleDatePresetChange('90')}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === '90' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                90D
+              </button>
+              <button
+                onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
+                style={{
+                  padding: '6px 12px',
+                  background: dateRange === 'custom' ? '#3b82f6' : '#334155',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: '#e2e8f0',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}
+              >
+                📅 Custom
+              </button>
+            </div>
+          )}
+
+          {showCustomDatePicker && (
+            <div style={{
+              background: '#0f172a',
+              padding: '16px',
+              borderRadius: '8px',
+              marginBottom: '16px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'flex-end',
+              flexWrap: 'wrap'
+            }}>
+              <div>
+                <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  From
+                </label>
+                <input
+                  type="date"
+                  value={customDateStart}
+                  onChange={(e) => setCustomDateStart(e.target.value)}
+                  style={{
+                    padding: '8px',
+                    background: '#1e293b',
+                    border: '1px solid #334155',
+                    borderRadius: '4px',
+                    color: '#e2e8f0',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  To
+                </label>
+                <input
+                  type="date"
+                  value={customDateEnd}
+                  onChange={(e) => setCustomDateEnd(e.target.value)}
+                  style={{
+                    padding: '8px',
+                    background: '#1e293b',
+                    border: '1px solid #334155',
+                    borderRadius: '4px',
+                    color: '#e2e8f0',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleCustomDateApply}
+                style={{
+                  padding: '8px 16px',
+                  background: '#3b82f6',
+                  border: 'none',
+                  borderRadius: '4px',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '12px'
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          )}
+
+          {filteredCampaigns.length > 0 ? (
             <div>
-              {campaigns.map((campaign) => (
+              {filteredCampaigns.map((campaign) => (
                 <div key={campaign.id} style={{ marginBottom: '12px' }}>
                   <div
                     onClick={() => handleCampaignClick(campaign)}
@@ -456,6 +821,11 @@ export default function App() {
                       </h3>
                       <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
                         {campaign.objective} • {campaign.status}
+                        {campaignMetrics[campaign.id]?.roas && (
+                          <span style={{ color: '#fbbf24', fontWeight: '700', marginLeft: '8px' }}>
+                            ROAS: {campaignMetrics[campaign.id].roas}x
+                          </span>
+                        )}
                       </p>
                     </div>
                     <span style={{
@@ -488,59 +858,38 @@ export default function App() {
                           gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
                           gap: '16px'
                         }}>
-                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                              Spend
-                            </p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#22c55e' }}>
-                              {formatCurrency(campaignMetrics[campaign.id].spend)}
-                            </p>
-                          </div>
+                          {renderMetricCard('Spend', formatCurrency(campaignMetrics[campaign.id].spend), '#22c55e')}
+                          {renderMetricCard('Impressions', formatNumber(campaignMetrics[campaign.id].impressions), '#60a5fa')}
+                          {renderMetricCard('Clicks', formatNumber(campaignMetrics[campaign.id].clicks), '#f59e0b')}
+                          {renderMetricCard('CTR', (campaignMetrics[campaign.id].ctr || 0).toFixed(2), '#a78bfa', '%')}
+                          {renderMetricCard('CPC', formatCurrency(campaignMetrics[campaign.id].cpc), '#ec4899')}
 
-                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                              Impressions
-                            </p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#60a5fa' }}>
-                              {formatNumber(campaignMetrics[campaign.id].impressions)}
-                            </p>
-                          </div>
+                          {isEcommerceCampaign(campaign.objective) && (
+                            <>
+                              {renderMetricCard('Purchases', formatNumber(campaignMetrics[campaign.id].purchases), '#06b6d4')}
+                              {renderMetricCard('Purchase Value', formatCurrency(campaignMetrics[campaign.id].purchaseValue), '#10b981')}
+                              <div style={{ 
+                                background: '#1e293b', 
+                                padding: '12px', 
+                                borderRadius: '6px',
+                                border: '2px solid #fbbf24'
+                              }}>
+                                <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                                  ROAS ⭐
+                                </p>
+                                <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#fbbf24' }}>
+                                  {campaignMetrics[campaign.id].roas}x
+                                </p>
+                              </div>
+                            </>
+                          )}
 
-                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                              Clicks
-                            </p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
-                              {formatNumber(campaignMetrics[campaign.id].clicks)}
-                            </p>
-                          </div>
-
-                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                              CTR
-                            </p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#a78bfa' }}>
-                              {(campaignMetrics[campaign.id].ctr || 0).toFixed(2)}%
-                            </p>
-                          </div>
-
-                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                              CPC
-                            </p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#ec4899' }}>
-                              {formatCurrency(campaignMetrics[campaign.id].cpc)}
-                            </p>
-                          </div>
-
-                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
-                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
-                              Conversions
-                            </p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#06b6d4' }}>
-                              {formatNumber(campaignMetrics[campaign.id].conversions)}
-                            </p>
-                          </div>
+                          {isLeadGenCampaign(campaign.objective) && (
+                            <>
+                              {renderMetricCard('Leads', formatNumber(campaignMetrics[campaign.id].purchases), '#06b6d4')}
+                              {renderMetricCard('Cost Per Lead', formatCurrency(campaignMetrics[campaign.id].cpc), '#10b981')}
+                            </>
+                          )}
                         </div>
                       ) : (
                         <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
@@ -554,7 +903,7 @@ export default function App() {
             </div>
           ) : (
             <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {loading ? 'Loading campaigns...' : 'Select an ad account to view campaigns.'}
+              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No campaigns match your filters.'}
             </p>
           )}
         </div>
