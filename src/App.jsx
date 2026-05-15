@@ -120,8 +120,8 @@ export default function App() {
     return sorted;
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     let filtered = campaigns;
 
     // Filter active campaigns
