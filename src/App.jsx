@@ -11,6 +11,10 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [expandedCampaign, setExpandedCampaign] = useState(null);
+  const [campaignMetrics, setCampaignMetrics] = useState({});
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [dateRange, setDateRange] = useState('30'); // 7, 30, 90 days
 
   const fetchCampaigns = async (accountId, token) => {
     setLoading(true);
@@ -42,6 +46,62 @@ export default function App() {
     }
   };
 
+  const fetchCampaignMetrics = async (campaignId, token, days) => {
+    setMetricsLoading(true);
+
+    try {
+      // Calculate date range
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000);
+      const dateStart = startDate.toISOString().split('T')[0];
+      const dateEnd = endDate.toISOString().split('T')[0];
+
+      const response = await fetch(`${API_URL}/api/campaign-insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          campaignId: campaignId, 
+          accessToken: token,
+          dateStart: dateStart,
+          dateEnd: dateEnd
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCampaignMetrics(prev => ({
+          ...prev,
+          [campaignId]: data.data
+        }));
+      } else {
+        setError(`Failed to load metrics: ${data.error}`);
+      }
+    } catch (err) {
+      setError(`Error loading metrics: ${err.message}`);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
+
+  const handleCampaignClick = (campaign) => {
+    if (expandedCampaign === campaign.id) {
+      setExpandedCampaign(null);
+    } else {
+      setExpandedCampaign(campaign.id);
+      if (!campaignMetrics[campaign.id]) {
+        fetchCampaignMetrics(campaign.id, accessToken, parseInt(dateRange));
+      }
+    }
+  };
+
+  const handleDateRangeChange = (days) => {
+    setDateRange(days);
+    if (expandedCampaign) {
+      fetchCampaignMetrics(expandedCampaign, accessToken, parseInt(days));
+    }
+  };
+
   const fetchAdAccounts = React.useCallback(async (token) => {
     setLoading(true);
     setError('');
@@ -60,7 +120,6 @@ export default function App() {
         setSuccess(`✅ Found ${data.count} ad accounts!`);
         if (data.data && data.data.length > 0) {
           setSelectedAccount(data.data[0].id);
-          // Remove 'act_' prefix when fetching campaigns
           fetchCampaigns(data.data[0].id.replace('act_', ''), token);
         }
       } else {
@@ -93,6 +152,8 @@ export default function App() {
   const handleAccountChange = (e) => {
     const accountId = e.target.value;
     setSelectedAccount(accountId);
+    setCampaignMetrics({});
+    setExpandedCampaign(null);
     if (accessToken) {
       fetchCampaigns(accountId, accessToken);
     }
@@ -116,8 +177,18 @@ export default function App() {
     setAdAccounts([]);
     setSelectedAccount('');
     setCampaigns([]);
+    setCampaignMetrics({});
+    setExpandedCampaign(null);
     setError('');
     setSuccess('');
+  };
+
+  const formatCurrency = (value) => {
+    return `$${parseFloat(value).toFixed(2)}`;
+  };
+
+  const formatNumber = (value) => {
+    return parseInt(value || 0).toLocaleString();
   };
 
   if (!loggedIn) {
@@ -301,64 +372,185 @@ export default function App() {
           padding: '24px',
           border: '1px solid #334155'
         }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px' }}>
-            Campaigns ({campaigns.length})
-          </h2>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px'
+          }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
+              Campaigns ({campaigns.length})
+            </h2>
+            {expandedCampaign && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleDateRangeChange('7')}
+                  style={{
+                    padding: '6px 12px',
+                    background: dateRange === '7' ? '#3b82f6' : '#334155',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '600'
+                  }}
+                >
+                  7D
+                </button>
+                <button
+                  onClick={() => handleDateRangeChange('30')}
+                  style={{
+                    padding: '6px 12px',
+                    background: dateRange === '30' ? '#3b82f6' : '#334155',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '600'
+                  }}
+                >
+                  30D
+                </button>
+                <button
+                  onClick={() => handleDateRangeChange('90')}
+                  style={{
+                    padding: '6px 12px',
+                    background: dateRange === '90' ? '#3b82f6' : '#334155',
+                    border: 'none',
+                    borderRadius: '4px',
+                    color: '#e2e8f0',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: '600'
+                  }}
+                >
+                  90D
+                </button>
+              </div>
+            )}
+          </div>
 
           {campaigns.length > 0 ? (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{
-                width: '100%',
-                fontSize: '14px',
-                borderCollapse: 'collapse'
-              }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #334155' }}>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
-                      Campaign Name
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
-                      Objective
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
-                      Status
-                    </th>
-                    <th style={{ textAlign: 'left', padding: '12px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>
-                      Campaign ID
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {campaigns.map((campaign) => (
-                    <tr key={campaign.id} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ padding: '12px', color: '#e2e8f0' }}>
+            <div>
+              {campaigns.map((campaign) => (
+                <div key={campaign.id} style={{ marginBottom: '12px' }}>
+                  <div
+                    onClick={() => handleCampaignClick(campaign)}
+                    style={{
+                      background: expandedCampaign === campaign.id ? '#0f172a' : '#334155',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      border: expandedCampaign === campaign.id ? '1px solid #3b82f6' : '1px solid #334155',
+                      transition: 'all 0.3s'
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: '600', color: '#e2e8f0' }}>
                         {campaign.name}
-                      </td>
-                      <td style={{ padding: '12px', color: '#cbd5e1' }}>
-                        {campaign.objective || 'N/A'}
-                      </td>
-                      <td style={{
-                        padding: '12px',
-                        color: campaign.status === 'ACTIVE' ? '#86efac' : '#fca5a5'
-                      }}>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          background: campaign.status === 'ACTIVE' ? '#1e3a1f' : '#7f1d1d',
-                          border: campaign.status === 'ACTIVE' ? '1px solid #22c55e' : '1px solid #dc2626'
+                      </h3>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
+                        {campaign.objective} • {campaign.status}
+                      </p>
+                    </div>
+                    <span style={{
+                      fontSize: '20px',
+                      color: '#3b82f6',
+                      transform: expandedCampaign === campaign.id ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.3s'
+                    }}>
+                      ▼
+                    </span>
+                  </div>
+
+                  {expandedCampaign === campaign.id && (
+                    <div style={{
+                      background: '#0f172a',
+                      padding: '20px',
+                      borderRadius: '0 0 8px 8px',
+                      borderLeft: '1px solid #3b82f6',
+                      borderRight: '1px solid #3b82f6',
+                      borderBottom: '1px solid #3b82f6',
+                      marginTop: '-1px'
+                    }}>
+                      {metricsLoading ? (
+                        <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                          Loading metrics...
+                        </p>
+                      ) : campaignMetrics[campaign.id] ? (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                          gap: '16px'
                         }}>
-                          {campaign.status}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px', color: '#64748b', fontSize: '11px', fontFamily: 'monospace' }}>
-                        {campaign.id}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                              Spend
+                            </p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#22c55e' }}>
+                              {formatCurrency(campaignMetrics[campaign.id].spend)}
+                            </p>
+                          </div>
+
+                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                              Impressions
+                            </p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#60a5fa' }}>
+                              {formatNumber(campaignMetrics[campaign.id].impressions)}
+                            </p>
+                          </div>
+
+                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                              Clicks
+                            </p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f59e0b' }}>
+                              {formatNumber(campaignMetrics[campaign.id].clicks)}
+                            </p>
+                          </div>
+
+                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                              CTR
+                            </p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#a78bfa' }}>
+                              {(campaignMetrics[campaign.id].ctr || 0).toFixed(2)}%
+                            </p>
+                          </div>
+
+                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                              CPC
+                            </p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#ec4899' }}>
+                              {formatCurrency(campaignMetrics[campaign.id].cpc)}
+                            </p>
+                          </div>
+
+                          <div style={{ background: '#1e293b', padding: '12px', borderRadius: '6px' }}>
+                            <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                              Conversions
+                            </p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#06b6d4' }}>
+                              {formatNumber(campaignMetrics[campaign.id].conversions)}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p style={{ color: '#94a3b8', textAlign: 'center', margin: 0 }}>
+                          No metrics available
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           ) : (
             <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px', margin: 0 }}>
