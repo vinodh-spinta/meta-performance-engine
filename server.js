@@ -15,7 +15,7 @@ app.use(express.json());
 const META_APP_ID = process.env.META_APP_ID || '1601962987562179';
 const META_APP_SECRET = process.env.META_APP_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://meta-performance-engine-production.up.railway.app/api/auth/callback';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://meta-performance--ads.vercel.app';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://meta-performance-engine-ads.vercel.app';
 
 console.log('=== META PERFORMANCE ENGINE - OAUTH PRODUCTION ===');
 console.log('✅ App ID:', META_APP_ID);
@@ -214,6 +214,79 @@ app.post('/api/ad-sets', async (req, res) => {
   }
 });
 
+// Step 6: Fetch campaign insights (metrics like spend, impressions, etc)
+app.post('/api/campaign-insights', async (req, res) => {
+  try {
+    const { campaignId, accessToken, dateStart, dateEnd } = req.body;
+
+    if (!campaignId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'campaignId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching insights for campaign: ${campaignId}`);
+
+    // Default to last 30 days if no dates provided
+    let start = dateStart;
+    let end = dateEnd;
+    
+    if (!start || !end) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    }
+
+    const insightsResponse = await axios.get(
+      `https://graph.facebook.com/v18.0/${campaignId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,conversions',
+          time_range: JSON.stringify({
+            since: start,
+            until: end
+          }),
+          access_token: accessToken
+        }
+      }
+    );
+
+    const insights = insightsResponse.data.data && insightsResponse.data.data.length > 0 
+      ? insightsResponse.data.data[0]
+      : {};
+
+    console.log(`✅ Fetched insights for campaign ${campaignId}\n`);
+
+    res.json({
+      success: true,
+      data: {
+        campaignId: campaignId,
+        spend: parseFloat(insights.spend || 0),
+        impressions: parseInt(insights.impressions || 0),
+        clicks: parseInt(insights.clicks || 0),
+        ctr: parseFloat(insights.ctr || 0),
+        cpc: parseFloat(insights.cpc || 0),
+        conversions: parseInt(insights.conversions || 0),
+        actions: insights.actions || [],
+        action_values: insights.action_values || [],
+        dateRange: { start, end }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching campaign insights:', error.response?.data?.error?.message || error.message);
+    
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    
+    res.status(500).json({
+      success: false,
+      error: errorMessage,
+      data: {}
+    });
+  }
+});
+
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.message);
@@ -227,5 +300,6 @@ app.listen(PORT, () => {
   console.log(`📍 GET /api/auth/callback - OAuth callback (Meta redirects here)`);
   console.log(`📍 POST /api/ad-accounts - Fetch user's ad accounts`);
   console.log(`📍 POST /api/campaigns - Fetch campaigns for account`);
-  console.log(`📍 POST /api/ad-sets - Fetch ad sets for campaign\n`);
+  console.log(`📍 POST /api/ad-sets - Fetch ad sets for campaign`);
+  console.log(`📍 POST /api/campaign-insights - Fetch campaign metrics (spend, impressions, etc)\n`);
 });
