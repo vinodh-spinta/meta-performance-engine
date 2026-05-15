@@ -120,7 +120,7 @@ export default function App() {
     return sorted;
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     let filtered = campaigns;
 
@@ -134,6 +134,7 @@ export default function App() {
 
     setFilteredCampaigns(filtered);
   }, [campaigns, showActiveOnly, sortBy, campaignMetrics]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchCampaigns = async (accountId, token) => {
     setLoading(true);
