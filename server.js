@@ -503,7 +503,7 @@ app.post('/api/ads', async (req, res) => {
       });
     }
 
-    console.log(`📊 Fetching ads/creatives for ad set: ${adSetId}`);
+    console.log(`\n📊 Fetching ads/creatives for ad set: ${adSetId}`);
 
     const adsResponse = await axios.get(
       `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
@@ -515,43 +515,62 @@ app.post('/api/ads', async (req, res) => {
       }
     );
 
+    console.log(`📋 Raw API Response:`, JSON.stringify(adsResponse.data, null, 2));
+
     let ads = adsResponse.data.data || [];
+    console.log(`✅ Found ${ads.length} ads in ad set`);
 
     // Extract image/video URLs from creative objects
     const adsWithCreativeUrls = ads.map((ad) => {
+      console.log(`\n🔍 Processing ad: ${ad.id} - ${ad.name}`);
+      
       let imageUrl = null;
       let videoUrl = null;
       let creativeType = 'UNKNOWN';
 
       if (ad.creative) {
         creativeType = ad.creative.type || 'UNKNOWN';
+        console.log(`   Creative Type: ${creativeType}`);
+        console.log(`   Creative ID: ${ad.creative.id}`);
         
         // Parse object_story_spec to extract media URL
         if (ad.creative.object_story_spec) {
+          console.log(`   Has object_story_spec`);
           const spec = ad.creative.object_story_spec;
           
           // For feed posts (most common)
           if (spec.link_data?.image_hash) {
+            console.log(`   Found image_hash: ${spec.link_data.image_hash}`);
             imageUrl = `https://www.facebook.com/ads/library/?ad_type=all&country=US&q=${spec.link_data.image_hash}`;
           }
           if (spec.link_data?.image_url) {
+            console.log(`   Found image_url: ${spec.link_data.image_url}`);
             imageUrl = spec.link_data.image_url;
           }
           if (spec.link_data?.message) {
-            // Store the ad copy as fallback
+            console.log(`   Found message: ${spec.link_data.message.substring(0, 50)}...`);
             ad.creativeText = spec.link_data.message;
           }
+        } else {
+          console.log(`   No object_story_spec found`);
         }
 
         // For video creatives
         if (ad.creative.video_data?.video_url) {
+          console.log(`   Found video_url: ${ad.creative.video_data.video_url}`);
           videoUrl = ad.creative.video_data.video_url;
           creativeType = 'VIDEO';
         }
         if (ad.creative.video_data?.image) {
+          console.log(`   Found video thumbnail: ${ad.creative.video_data.image}`);
           imageUrl = ad.creative.video_data.image;
         }
+      } else {
+        console.log(`   ⚠️ No creative data attached to ad`);
       }
+
+      console.log(`   Final imageUrl: ${imageUrl}`);
+      console.log(`   Final videoUrl: ${videoUrl}`);
 
       return {
         ...ad,
@@ -565,7 +584,7 @@ app.post('/api/ads', async (req, res) => {
       };
     });
 
-    console.log(`✅ Fetched ${adsWithCreativeUrls.length} ads/creatives with media URLs\n`);
+    console.log(`\n✅ Fetched ${adsWithCreativeUrls.length} ads/creatives with media URLs\n`);
 
     res.json({
       success: true,
@@ -573,8 +592,11 @@ app.post('/api/ads', async (req, res) => {
       count: adsWithCreativeUrls.length
     });
   } catch (error) {
-    console.error('❌ Error fetching ads:', error.response?.data?.error?.message || error.message);
-    console.error('Full error:', error.message);
+    console.error('\n❌ Error fetching ads:');
+    console.error('   Message:', error.message);
+    console.error('   Status:', error.response?.status);
+    console.error('   Data:', error.response?.data);
+    
     res.status(500).json({
       success: false,
       error: error.response?.data?.error?.message || error.message
@@ -687,6 +709,7 @@ app.listen(PORT, () => {
   console.log(`📍 POST /api/ad-accounts - Get ad accounts`);
   console.log(`📍 POST /api/campaigns - Get campaigns`);
   console.log(`📍 POST /api/ad-sets - Get ad sets`);
+  console.log(`📍 POST /api/ads - Get ads/creatives under ad set`);
   console.log(`📍 POST /api/campaign-insights - Get campaign metrics (with detailed logging)`);
   console.log(`📍 POST /api/adset-insights - Get ad set metrics`);
   console.log(`📍 POST /api/creative-insights - Get creative metrics\n`);
