@@ -491,7 +491,7 @@ app.post('/api/adset-insights', async (req, res) => {
   }
 });
 
-// Step 7B: Fetch ads/creatives under ad set (Stage 3C)
+// Step 7B: Fetch ads/creatives under ad set (Stage 3C) - SIMPLIFIED
 app.post('/api/ads', async (req, res) => {
   try {
     const { adSetId, accessToken } = req.body;
@@ -505,29 +505,28 @@ app.post('/api/ads', async (req, res) => {
 
     console.log(`\n📊 Fetching ads/creatives for ad set: ${adSetId}`);
 
-    // First, try to get ads with minimal fields
+    // Get all ads under this ad set
     const adsResponse = await axios.get(
       `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
       {
         params: {
-          fields: 'id,name,status,created_time',
+          fields: 'id,name,status,created_time,adset_id',
           access_token: accessToken
         }
       }
     );
 
-    console.log(`📋 Raw API Response:`, JSON.stringify(adsResponse.data, null, 2));
-
     let ads = adsResponse.data.data || [];
     console.log(`✅ Found ${ads.length} ads in ad set`);
 
-    // If we have ads, try to get creative details for each one
+    // For each ad, get its creative data
     const adsWithCreatives = await Promise.all(
       ads.map(async (ad) => {
         try {
           console.log(`\n🔍 Fetching creative for ad: ${ad.id}`);
           
-          const creativeResponse = await axios.get(
+          // Get the ad with creative info
+          const adDetailsResponse = await axios.get(
             `https://graph.facebook.com/${API_VERSION}/${ad.id}`,
             {
               params: {
@@ -537,14 +536,14 @@ app.post('/api/ads', async (req, res) => {
             }
           );
 
-          const adWithCreative = creativeResponse.data;
-          console.log(`   Got ad with creative:`, JSON.stringify(adWithCreative, null, 2));
+          const adDetails = adDetailsResponse.data;
+          console.log(`   Ad has creative:`, adDetails.creative?.id);
 
           // If creative exists, get its details
-          if (adWithCreative.creative?.id) {
+          if (adDetails.creative?.id) {
             try {
-              const creativeDetailsResponse = await axios.get(
-                `https://graph.facebook.com/${API_VERSION}/${adWithCreative.creative.id}`,
+              const creativeResponse = await axios.get(
+                `https://graph.facebook.com/${API_VERSION}/${adDetails.creative.id}`,
                 {
                   params: {
                     fields: 'id,name,object_story_spec,video_data',
@@ -553,72 +552,101 @@ app.post('/api/ads', async (req, res) => {
                 }
               );
 
-              console.log(`   Creative details:`, JSON.stringify(creativeDetailsResponse.data, null, 2));
+              const creative = creativeResponse.data;
+              console.log(`   Creative data retrieved:`, { id: creative.id, name: creative.name });
 
-              // Extract image/video URL from creative
-              let imageUrl = null;
-              let videoUrl = null;
+              // Extract ad copy and creative type
+              let adCopy = 'No copy available';
               let creativeType = 'UNKNOWN';
+              let headline = '';
+              let description = '';
 
-              const creative = creativeDetailsResponse.data;
-
-              // Try to get video URL first
-              if (creative.video_data?.video_url) {
-                videoUrl = creative.video_data.video_url;
-                creativeType = 'VIDEO';
-                console.log(`   ✅ Found video_url: ${videoUrl}`);
-              }
-
-              // Try to get video thumbnail
-              if (creative.video_data?.image) {
-                imageUrl = creative.video_data.image;
-                console.log(`   ✅ Found video thumbnail: ${imageUrl}`);
-              }
-
-              // Try to get image from object_story_spec
-              if (creative.object_story_spec?.link_data?.image_url) {
-                imageUrl = creative.object_story_spec.link_data.image_url;
+              // Check object_story_spec for text content
+              if (creative.object_story_spec?.link_data?.message) {
+                adCopy = creative.object_story_spec.link_data.message;
                 creativeType = 'STATIC';
-                console.log(`   ✅ Found image_url from object_story_spec: ${imageUrl}`);
+                console.log(`   ✅ Found message (copy):`);
+              }
+              if (creative.object_story_spec?.link_data?.headline) {
+                headline = creative.object_story_spec.link_data.headline;
+                console.log(`   ✅ Found headline`);
+              }
+              if (creative.object_story_spec?.link_data?.description) {
+                description = creative.object_story_spec.link_data.description;
+                console.log(`   ✅ Found description`);
               }
 
-              // Fallback: try to construct URL from image hash if needed
-              if (!imageUrl && creative.object_story_spec?.link_data?.image_hash) {
-                console.log(`   📌 Found image_hash but no direct URL: ${creative.object_story_spec.link_data.image_hash}`);
-                // Note: image_hash can't be directly used as a URL
+              // Check if it's a video
+              if (creative.video_data) {
+                creativeType = 'VIDEO';
+                console.log(`   ✅ Detected VIDEO creative`);
               }
 
               return {
-                ...ad,
-                creativeData: {
-                  id: creative.id,
-                  name: creative.name,
-                  type: creativeType,
-                  imageUrl: imageUrl,
-                  videoUrl: videoUrl,
-                  displayUrl: imageUrl || videoUrl,
-                  objectStorySpec: creative.object_story_spec,
-                  videoData: creative.video_data
-                }
+                id: ad.id,
+                name: ad.name,
+                status: ad.status,
+                created_time: ad.created_time,
+                creativeId: creative.id,
+                creativeName: creative.name,
+                adCopy: adCopy,
+                headline: headline,
+                description: description,
+                creativeType: creativeType,
+                rawCreative: creative
               };
             } catch (creativeErr) {
-              console.log(`   ⚠️ Could not get creative details:`, creativeErr.message);
+              console.log(`   ⚠️ Could not fetch creative details:`, creativeErr.message);
               return {
-                ...ad,
-                creativeData: adWithCreative.creative
+                id: ad.id,
+                name: ad.name,
+                status: ad.status,
+                created_time: ad.created_time,
+                creativeId: adDetails.creative.id,
+                creativeName: 'Unknown Creative',
+                adCopy: 'Could not retrieve copy',
+                headline: '',
+                description: '',
+                creativeType: 'UNKNOWN',
+                rawCreative: adDetails.creative
               };
             }
+          } else {
+            console.log(`   ⚠️ Ad has no creative attached`);
+            return {
+              id: ad.id,
+              name: ad.name,
+              status: ad.status,
+              created_time: ad.created_time,
+              creativeId: null,
+              creativeName: 'No Creative',
+              adCopy: 'No creative attached',
+              headline: '',
+              description: '',
+              creativeType: 'NONE',
+              rawCreative: null
+            };
           }
-
-          return ad;
         } catch (err) {
-          console.log(`   ⚠️ Error fetching creative for ad ${ad.id}:`, err.message);
-          return ad;
+          console.log(`   ❌ Error processing ad ${ad.id}:`, err.message);
+          return {
+            id: ad.id,
+            name: ad.name,
+            status: ad.status,
+            created_time: ad.created_time,
+            creativeId: null,
+            creativeName: 'Error',
+            adCopy: `Error: ${err.message}`,
+            headline: '',
+            description: '',
+            creativeType: 'ERROR',
+            rawCreative: null
+          };
         }
       })
     );
 
-    console.log(`\n✅ Fetched ${adsWithCreatives.length} ads with creatives\n`);
+    console.log(`\n✅ Successfully processed ${adsWithCreatives.length} ads with creative data\n`);
 
     res.json({
       success: true,
