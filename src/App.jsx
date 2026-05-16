@@ -96,13 +96,12 @@ export default function App() {
   const [loggingIn, setLoggingIn] = useState(false);
   
   // Stage 3B - Ad Sets
-  const [expandedAdSets, setExpandedAdSets] = useState(null);
+  const [expandedCreatives, setExpandedCreatives] = useState(null);
   const [adSets, setAdSets] = useState({});
   const [adSetMetrics, setAdSetMetrics] = useState({});
   const [adSetsLoading, setAdSetsLoading] = useState({});
   
   // Stage 3C - Creatives
-  const [expandedCreatives, setExpandedCreatives] = useState(null);
   const [adCreatives, setAdCreatives] = useState({});
   const [creativeMetrics, setCreativeMetrics] = useState({});
   const [creativesLoading, setCreativesLoading] = useState({});
