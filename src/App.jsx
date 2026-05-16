@@ -844,7 +844,7 @@ export default function App() {
                         marginTop: '-1px'
                       }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                          {isLeadGen ? [
+                          {isLeadGen && [
                             { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
                             { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
                             { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
@@ -852,7 +852,18 @@ export default function App() {
                             { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
                             { label: 'Leads', value: formatNumber(metrics.leads), color: '#10b981' },
                             { label: 'CPL', value: formatCurrency(metrics.cpl), color: performanceColor, highlight: true }
-                          ] : [
+                          ]?.map((item, i) => (
+                            <div key={i} style={{
+                              background: '#f9fafb',
+                              padding: '16px',
+                              borderRadius: '8px',
+                              border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
+                            }}>
+                              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
+                              <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
+                            </div>
+                          ))}
+                          {!isLeadGen && [
                             { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
                             { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
                             { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
@@ -861,7 +872,7 @@ export default function App() {
                             { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
                             { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
                             { label: 'ROAS', value: (parseFloat(metrics.roas) || 0).toFixed(2) + 'x', color: performanceColor, highlight: true }
-                          ].map((item, i) => (
+                          ]?.map((item, i) => (
                             <div key={i} style={{
                               background: '#f9fafb',
                               padding: '16px',
