@@ -509,20 +509,47 @@ app.post('/api/ads', async (req, res) => {
       `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
       {
         params: {
-          fields: 'id,name,status,created_time,adset_id',
+          fields: 'id,name,status,created_time,adset_id,creative',
           access_token: accessToken
         }
       }
     );
 
-    const ads = adsResponse.data.data || [];
+    let ads = adsResponse.data.data || [];
 
-    console.log(`✅ Fetched ${ads.length} ads/creatives\n`);
+    // Fetch detailed creative data for each ad
+    const adsWithCreatives = await Promise.all(
+      ads.map(async (ad) => {
+        try {
+          if (ad.creative && ad.creative.id) {
+            const creativeResponse = await axios.get(
+              `https://graph.facebook.com/${API_VERSION}/${ad.creative.id}`,
+              {
+                params: {
+                  fields: 'id,name,type,image_url,video_data,title,body,object_story_spec,status',
+                  access_token: accessToken
+                }
+              }
+            );
+            return {
+              ...ad,
+              creativeData: creativeResponse.data
+            };
+          }
+          return ad;
+        } catch (err) {
+          console.log(`⚠️ Could not fetch creative details for ad ${ad.id}`);
+          return ad;
+        }
+      })
+    );
+
+    console.log(`✅ Fetched ${adsWithCreatives.length} ads/creatives with details\n`);
 
     res.json({
       success: true,
-      data: ads,
-      count: ads.length
+      data: adsWithCreatives,
+      count: adsWithCreatives.length
     });
   } catch (error) {
     console.error('❌ Error fetching ads:', error.response?.data?.error?.message || error.message);
