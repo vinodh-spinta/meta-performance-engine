@@ -1,1326 +1,724 @@
-import React, { useState, useEffect } from 'react';
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const axios = require('axios');
 
-const API_URL = 'https://meta-performance-engine-production.up.railway.app';
+const app = express();
 
-// Skeleton Loader Component
-const SkeletonLoader = ({ width = '100%', height = '24px', style = {} }) => (
-  <div style={{
-    background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
-    backgroundSize: '200% 100%',
-    animation: 'shimmer 2s infinite',
-    width,
-    height,
-    borderRadius: '6px',
-    ...style
-  }} />
-);
+// Middleware
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
 
-// Loading Spinner Component
-const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
-  <div style={{
-    width: size,
-    height: size,
-    border: `4px solid ${color}20`,
-    borderTop: `4px solid ${color}`,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite'
-  }} />
-);
+// Config
+const META_APP_ID = process.env.META_APP_ID || '1601962987562179';
+const META_APP_SECRET = process.env.META_APP_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://meta-performance-engine-production.up.railway.app/api/auth/callback';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://meta-performance-engine-ads.vercel.app';
+const API_VERSION = process.env.META_API_VERSION || 'v18.0';
 
-// Creative Preview Component - Shows actual creative image/video with type badge
-const CreativePreview = ({ creative }) => {
-  const creativeData = creative.creativeData || {};
-  const imageUrl = creativeData.imageUrl || creativeData.image_url;
-  const videoUrl = creativeData.videoUrl || creativeData.video_url;
-  const creativeType = creativeData.type || 'UNKNOWN';
+console.log('\n🚀 META PERFORMANCE ENGINE - PRODUCTION BACKEND');
+console.log('='.repeat(50));
+console.log(`✅ App ID: ${META_APP_ID}`);
+console.log(`✅ API Version: ${API_VERSION}`);
+console.log(`✅ Redirect URI: ${REDIRECT_URI}`);
+console.log(`✅ Frontend URL: ${FRONTEND_URL}`);
+console.log('='.repeat(50) + '\n');
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date(),
+    message: 'Backend is running with enhanced logging',
+    version: API_VERSION
+  });
+});
+
+// Step 1: Generate OAuth login URL
+app.get('/api/auth/login-url', (req, res) => {
+  const loginUrl = `https://www.facebook.com/${API_VERSION}/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=ads_management,ads_read,business_management&state=random_state_string`;
   
-  const typeIcons = {
-    'STATIC': '🖼️',
-    'CAROUSEL': '📸',
-    'VIDEO': '🎥',
-    'VIDEO_SLIDESHOW': '🎬',
-    'COLLECTION': '📚',
-    'CAROUSEL_VIDEO': '🎥',
-    'UNKNOWN': '📌'
-  };
+  res.json({
+    success: true,
+    url: loginUrl
+  });
+});
 
-  const icon = typeIcons[creativeType] || typeIcons['UNKNOWN'];
-  const displayUrl = imageUrl || videoUrl;
+// Step 2: Handle OAuth callback
+app.get('/api/auth/callback', async (req, res) => {
+  try {
+    const { code, error } = req.query;
 
-  return (
-    <div style={{
-      width: '100px',
-      height: '100px',
-      background: displayUrl 
-        ? `url("${displayUrl}") center/cover no-repeat` 
-        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      backgroundColor: displayUrl ? 'transparent' : undefined,
-      borderRadius: '8px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative',
-      flexShrink: 0,
-      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
-      border: '1px solid #e5e7eb',
-      overflow: 'hidden'
-    }}>
-      {!displayUrl && (
-        <span style={{ fontSize: '36px' }}>{icon}</span>
-      )}
-      {videoUrl && displayUrl === videoUrl && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '8px'
-        }}>
-          <span style={{ fontSize: '32px', color: 'white' }}>▶</span>
-        </div>
-      )}
-      <span style={{
-        position: 'absolute',
-        bottom: '-8px',
-        right: '-8px',
-        background: '#fff',
-        border: '2px solid #667eea',
-        borderRadius: '50%',
-        width: '28px',
-        height: '28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '12px',
-        fontWeight: '700',
-        color: '#667eea',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-      }}>
-        {creativeType === 'VIDEO' || videoUrl ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
-      </span>
-    </div>
-  );
-};
-
-export default function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [accessToken, setAccessToken] = useState('');
-  const [adAccounts, setAdAccounts] = useState([]);
-  const [selectedAccount, setSelectedAccount] = useState('');
-  const [selectedAccountCurrency, setSelectedAccountCurrency] = useState('USD');
-  const [campaigns, setCampaigns] = useState([]);
-  const [filteredCampaigns, setFilteredCampaigns] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [expandedCampaign, setExpandedCampaign] = useState(null);
-  const [campaignMetrics, setCampaignMetrics] = useState({});
-  const [metricsLoading, setMetricsLoading] = useState(false);
-  const [dateRange, setDateRange] = useState('30');
-  const [showActiveOnly, setShowActiveOnly] = useState(true);
-  const [sortBy, setSortBy] = useState('performance');
-  const [loggingIn, setLoggingIn] = useState(false);
-  
-  // Stage 3B - Ad Sets
-  const [expandedCreatives, setExpandedCreatives] = useState(null);
-  const [adSets, setAdSets] = useState({});
-  const [adSetMetrics, setAdSetMetrics] = useState({});
-  const [adSetsLoading, setAdSetsLoading] = useState({});
-  
-  // Stage 3C - Creatives
-  const [adCreatives, setAdCreatives] = useState({});
-  const [creativeMetrics, setCreativeMetrics] = useState({});
-  const [creativesLoading, setCreativesLoading] = useState({});
-
-  const getCurrencySymbol = (currency) => {
-    const symbols = {
-      'USD': '$', 'INR': '₹', 'EUR': '€', 'GBP': '£', 'AUD': 'A$',
-      'CAD': 'C$', 'JPY': '¥', 'SGD': 'S$', 'HKD': 'HK$', 'NZD': 'NZ$'
-    };
-    return symbols[currency] || currency;
-  };
-
-  const isLeadGenCampaign = (objective) => {
-    const leadObjectives = ['LEAD_GENERATION', 'MESSAGES', 'OUTCOME_LEADS'];
-    return leadObjectives.includes(objective);
-  };
-
-  const isEcommerceCampaign = (objective) => {
-    const ecommerceObjectives = ['SALES', 'PRODUCT_CATALOG_SALES', 'CONVERSIONS', 'OUTCOME_SALES'];
-    return ecommerceObjectives.includes(objective);
-  };
-
-  const getPerformanceColor = (objective, metrics) => {
-    if (isLeadGenCampaign(objective)) {
-      const cpl = parseFloat(metrics?.cpl) || 0;
-      if (cpl === 0) return '#6b7280';
-      if (cpl <= 5) return '#8b5cf6';
-      if (cpl <= 10) return '#10b981';
-      if (cpl <= 25) return '#3b82f6';
-      if (cpl <= 50) return '#f59e0b';
-      return '#ef4444';
-    } else {
-      const roas = parseFloat(metrics?.roas) || 0;
-      if (roas >= 3) return '#8b5cf6';
-      if (roas >= 2) return '#10b981';
-      if (roas >= 1.5) return '#3b82f6';
-      if (roas >= 1) return '#f59e0b';
-      if (roas > 0) return '#ef4444';
-      return '#6b7280';
+    if (error) {
+      console.error('❌ OAuth error:', error);
+      return res.redirect(`${FRONTEND_URL}?error=${encodeURIComponent(error)}`);
     }
-  };
 
-  const getPerformanceLabel = (objective, metrics) => {
-    if (isLeadGenCampaign(objective)) {
-      const cpl = parseFloat(metrics?.cpl) || 0;
-      if (cpl === 0) return '📊 No Data';
-      if (cpl <= 5) return '🌟 Excellent';
-      if (cpl <= 10) return '✨ Good';
-      if (cpl <= 25) return '👍 Fair';
-      if (cpl <= 50) return '⚠️ High';
-      return '❌ Very High';
-    } else {
-      const roas = parseFloat(metrics?.roas) || 0;
-      if (roas >= 3) return '🌟 Exceptional';
-      if (roas >= 2) return '✨ Excellent';
-      if (roas >= 1.5) return '👍 Good';
-      if (roas >= 1) return '⚠️ Fair';
-      if (roas > 0) return '❌ Poor';
-      return '📊 No Data';
+    if (!code) {
+      return res.redirect(`${FRONTEND_URL}?error=No+authorization+code`);
     }
-  };
 
-  const getDateRange = (preset) => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
-    const formatDate = (date) => date.toISOString().split('T')[0];
+    console.log('🔐 OAuth callback - exchanging code for token...');
 
-    return {
-      'today': { start: formatDate(today), end: formatDate(today) },
-      'yesterday': { start: formatDate(yesterday), end: formatDate(yesterday) },
-      'mtd': { start: formatDate(monthStart), end: formatDate(today) },
-      'qtd': { start: formatDate(quarterStart), end: formatDate(today) },
-      '7': { days: 7 },
-      '30': { days: 30 },
-      '90': { days: 90 }
-    }[preset];
-  };
-
-  const sortCampaigns = (campaignsToSort) => {
-    const sorted = [...campaignsToSort];
-    switch (sortBy) {
-      case 'performance':
-        sorted.sort((a, b) => {
-          const metricsA = campaignMetrics[a.id] || {};
-          const metricsB = campaignMetrics[b.id] || {};
-          
-          if (isLeadGenCampaign(a.objective) && isLeadGenCampaign(b.objective)) {
-            return (parseFloat(metricsA.cpl) || Infinity) - (parseFloat(metricsB.cpl) || Infinity);
-          } else if (isEcommerceCampaign(a.objective) && isEcommerceCampaign(b.objective)) {
-            return (parseFloat(metricsB.roas) || 0) - (parseFloat(metricsA.roas) || 0);
-          }
-          return 0;
-        });
-        break;
-      case 'spend':
-        sorted.sort((a, b) => (parseFloat(campaignMetrics[b.id]?.spend) || 0) - (parseFloat(campaignMetrics[a.id]?.spend) || 0));
-        break;
-      case 'impressions':
-        sorted.sort((a, b) => (parseInt(campaignMetrics[b.id]?.impressions) || 0) - (parseInt(campaignMetrics[a.id]?.impressions) || 0));
-        break;
-      default:
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return sorted;
-  };
-
-  /* eslint-disable react-hooks/exhaustive-deps */
-  useEffect(() => {
-    let filtered = campaigns;
-    if (showActiveOnly) {
-      filtered = filtered.filter(c => c.status === 'ACTIVE');
-    }
-    filtered = sortCampaigns(filtered);
-    setFilteredCampaigns(filtered);
-  }, [campaigns, showActiveOnly, sortBy, campaignMetrics]);
-  /* eslint-enable react-hooks/exhaustive-deps */
-
-  const fetchCampaigns = async (accountId, token) => {
-    setLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      const cleanAccountId = accountId.replace('act_', '');
-      const response = await fetch(`${API_URL}/api/campaigns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adAccountId: cleanAccountId, accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCampaigns(data.data || []);
-        setCampaignMetrics({});
-        setSuccess(`✅ Loaded ${data.count} campaigns. Fetching metrics...`);
-        fetchAllCampaignMetrics(data.data || [], token, dateRange);
-      } else {
-        setError(`Failed: ${data.error}`);
+    const tokenResponse = await axios.post(
+      `https://graph.facebook.com/${API_VERSION}/oauth/access_token`,
+      {
+        client_id: META_APP_ID,
+        client_secret: META_APP_SECRET,
+        redirect_uri: REDIRECT_URI,
+        code: code
       }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAllCampaignMetrics = async (campaignsArray, token, range) => {
-    setMetricsLoading(true);
-    const getRange = getDateRange(range);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (campaign, timeoutMs = 15000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/campaign-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
-    };
-
-    const promises = campaignsArray.map(async (campaign, index) => {
-      try {
-        const data = await fetchWithTimeout(campaign);
-        
-        if (data.success) {
-          metricsMap[campaign.id] = data.data;
-        } else {
-          metricsMap[campaign.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-          };
-        }
-        setSuccess(`✅ Loading metrics... ${index + 1}/${campaignsArray.length}`);
-      } catch (err) {
-        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
-        metricsMap[campaign.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setCampaignMetrics(metricsMap);
-    setMetricsLoading(false);
-    setSuccess(`✅ All metrics loaded!`);
-  };
-
-  // Stage 3B - Fetch Ad Sets
-  const fetchAdSets = async (campaignId, token) => {
-    setAdSetsLoading(prev => ({ ...prev, [campaignId]: true }));
-    try {
-      const response = await fetch(`${API_URL}/api/ad-sets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAdSets(prev => ({ ...prev, [campaignId]: data.data || [] }));
-        fetchAllAdSetMetrics(campaignId, data.data || [], token);
-      }
-    } catch (err) {
-      console.error(`Error fetching ad sets for campaign ${campaignId}:`, err);
-    } finally {
-      setAdSetsLoading(prev => ({ ...prev, [campaignId]: false }));
-    }
-  };
-
-  const fetchAllAdSetMetrics = async (campaignId, adSetsArray, token) => {
-    const getRange = getDateRange(dateRange);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (adSet, timeoutMs = 10000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/adset-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adSetId: adSet.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
-    };
-
-    const promises = adSetsArray.map(async (adSet) => {
-      try {
-        const data = await fetchWithTimeout(adSet);
-        if (data.success) {
-          metricsMap[adSet.id] = data.data;
-        } else {
-          metricsMap[adSet.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-          };
-        }
-      } catch (err) {
-        metricsMap[adSet.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setAdSetMetrics(prev => ({ ...prev, ...metricsMap }));
-  };
-
-  // Stage 3C - Fetch Creatives (Ads under Ad Set)
-  const fetchCreatives = async (adSetId, token) => {
-    setCreativesLoading(prev => ({ ...prev, [adSetId]: true }));
-    console.log(`🎬 FETCHING CREATIVES for adSetId: ${adSetId}`);
-    try {
-      const requestBody = { adSetId, accessToken: token };
-      console.log('📤 Sending request:', requestBody);
-      
-      const response = await fetch(`${API_URL}/api/ads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-      
-      console.log('📥 Response status:', response.status);
-      const data = await response.json();
-      console.log('📥 Response data:', data);
-      
-      if (data.success) {
-        console.log(`✅ Got ${data.count} creatives`);
-        setAdCreatives(prev => ({ ...prev, [adSetId]: data.data || [] }));
-        fetchAllCreativeMetrics(adSetId, data.data || [], token);
-      } else {
-        console.error('❌ API error:', data.error);
-      }
-    } catch (err) {
-      console.error(`❌ Error fetching creatives for ad set ${adSetId}:`, err);
-    } finally {
-      setCreativesLoading(prev => ({ ...prev, [adSetId]: false }));
-    }
-  };
-
-  const fetchAllCreativeMetrics = async (adSetId, creativesArray, token) => {
-    const getRange = getDateRange(dateRange);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (creative, timeoutMs = 10000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/creative-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adId: creative.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
-    };
-
-    const promises = creativesArray.map(async (creative) => {
-      try {
-        const data = await fetchWithTimeout(creative);
-        if (data.success) {
-          metricsMap[creative.id] = data.data;
-        } else {
-          metricsMap[creative.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
-          };
-        }
-      } catch (err) {
-        metricsMap[creative.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setCreativeMetrics(prev => ({ ...prev, ...metricsMap }));
-  };
-
-  const handleCampaignClick = (campaign) => {
-    if (expandedCampaign === campaign.id) {
-      setExpandedCampaign(null);
-      setExpandedCreatives(null);
-    } else {
-      setExpandedCampaign(campaign.id);
-      if (!adSets[campaign.id]) {
-        fetchAdSets(campaign.id, accessToken);
-      }
-    }
-  };
-
-  const handleAdSetClick = (adSetId) => {
-    if (expandedCreatives === adSetId) {
-      setExpandedCreatives(null);
-    } else {
-      setExpandedCreatives(adSetId);
-      if (!adCreatives[adSetId]) {
-        fetchCreatives(adSetId, accessToken);
-      }
-    }
-  };
-
-  const handleDatePresetChange = (preset) => {
-    setDateRange(preset);
-    if (campaigns.length > 0) {
-      fetchAllCampaignMetrics(campaigns, accessToken, preset);
-    }
-  };
-
-  /* eslint-disable react-hooks/exhaustive-deps */
-  const fetchAdAccounts = React.useCallback(async (token) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch(`${API_URL}/api/ad-accounts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAdAccounts(data.data || []);
-        setSuccess(`✅ Found ${data.count} ad accounts. Select one to view campaigns.`);
-      } else {
-        setError(`Failed: ${data.error}`);
-      }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  /* eslint-enable react-hooks/exhaustive-deps */
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const errorMsg = params.get('error');
-    if (token) {
-      setAccessToken(token);
-      setLoggedIn(true);
-      setSuccess('✅ Logged in successfully! Select an ad account to view campaigns.');
-      fetchAdAccounts(token);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (errorMsg) {
-      setError(`OAuth error: ${errorMsg}`);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [fetchAdAccounts]);
-
-  const handleAccountChange = (e) => {
-    const accountId = e.target.value;
-    const account = adAccounts.find(a => a.id === accountId);
-    setSelectedAccount(accountId);
-    setSelectedAccountCurrency(account?.currency || 'USD');
-    setCampaignMetrics({});
-    setExpandedCampaign(null);
-    setExpandedCreatives(null);
-    setShowActiveOnly(true);
-    setSortBy('performance');
-    if (accessToken) {
-      fetchCampaigns(accountId, accessToken);
-    }
-  };
-
-  const handleLogin = async () => {
-    setLoggingIn(true);
-    try {
-      const response = await fetch(`${API_URL}/api/auth/login-url`);
-      const data = await response.json();
-      if (data.success) {
-        window.location.href = data.url;
-      }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-      setLoggingIn(false);
-    }
-  };
-
-  const handleLogout = () => {
-    setLoggedIn(false);
-    setAccessToken('');
-    setAdAccounts([]);
-    setSelectedAccount('');
-    setSelectedAccountCurrency('USD');
-    setCampaigns([]);
-    setFilteredCampaigns([]);
-    setCampaignMetrics({});
-    setExpandedCampaign(null);
-    setExpandedCreatives(null);
-    setAdSets({});
-    setAdSetMetrics({});
-    setAdCreatives({});
-    setCreativeMetrics({});
-    setError('');
-    setSuccess('');
-    setShowActiveOnly(true);
-    setSortBy('performance');
-  };
-
-  const formatCurrency = (value) => {
-    const num = parseFloat(value) || 0;
-    if (isNaN(num)) return `${getCurrencySymbol(selectedAccountCurrency)}0.00`;
-    return `${getCurrencySymbol(selectedAccountCurrency)}${num.toFixed(2)}`;
-  };
-
-  const formatNumber = (value) => {
-    const num = parseInt(value) || 0;
-    return num.toLocaleString();
-  };
-
-  const calculateSummary = () => {
-    let totalSpend = 0, totalImpressions = 0;
-    let totalPurchases = 0, totalPurchaseValue = 0;
-    let totalLeads = 0;
-    
-    filteredCampaigns.forEach(campaign => {
-      if (campaignMetrics[campaign.id]) {
-        const m = campaignMetrics[campaign.id];
-        totalSpend += parseFloat(m.spend) || 0;
-        totalImpressions += parseInt(m.impressions) || 0;
-        
-        if (isLeadGenCampaign(campaign.objective)) {
-          totalLeads += parseInt(m.leads) || 0;
-        } else {
-          totalPurchases += parseInt(m.purchases) || 0;
-          totalPurchaseValue += parseFloat(m.purchaseValue) || 0;
-        }
-      }
-    });
-
-    const avgROAS = totalSpend > 0 && totalPurchaseValue > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
-    const avgCPL = totalLeads > 0 && totalSpend > 0 ? (totalSpend / totalLeads).toFixed(2) : 0;
-    
-    return { totalSpend, totalImpressions, totalPurchases, totalLeads, totalPurchaseValue, avgROAS, avgCPL };
-  };
-
-  if (!loggedIn) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        padding: '20px'
-      }}>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-          }
-          @keyframes slideInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
-        <div style={{
-          background: 'white',
-          borderRadius: '16px',
-          padding: '48px',
-          maxWidth: '420px',
-          width: '100%',
-          boxShadow: '0 25px 50px rgba(0,0,0,0.2)',
-          textAlign: 'center',
-          animation: 'slideInUp 0.5s ease-out'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
-          <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#1f2937', margin: '0 0 8px' }}>
-            Meta Performance
-          </h1>
-          <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#667eea', margin: '0 0 24px' }}>
-            Engine
-          </h2>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 32px', lineHeight: '1.6' }}>
-            Professional Meta Ads analytics for Spinta Digital
-          </p>
-          <button
-            onClick={handleLogin}
-            disabled={loggingIn}
-            style={{
-              width: '100%',
-              padding: '14px',
-              background: loggingIn ? '#999' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '700',
-              cursor: loggingIn ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              transition: 'all 0.3s'
-            }}
-          >
-            {loggingIn ? (
-              <>
-                <LoadingSpinner size="20px" color="white" />
-                Connecting to Meta...
-              </>
-            ) : (
-              <>🔐 Login with Meta</>
-            )}
-          </button>
-          {error && <p style={{ fontSize: '12px', color: '#dc2626', margin: '16px 0 0', background: '#fee2e2', padding: '8px', borderRadius: '6px' }}>{error}</p>}
-        </div>
-      </div>
     );
+
+    const accessToken = tokenResponse.data.access_token;
+    console.log('✅ Access token obtained\n');
+
+    res.redirect(`${FRONTEND_URL}?token=${accessToken}`);
+  } catch (error) {
+    console.error('❌ OAuth error:', error.response?.data || error.message);
+    res.redirect(`${FRONTEND_URL}?error=${encodeURIComponent(error.message)}`);
   }
+});
 
-  const summary = calculateSummary();
+// Step 3: Fetch ad accounts
+app.post('/api/ad-accounts', async (req, res) => {
+  try {
+    const { accessToken } = req.body;
 
-  return (
-    <div style={{
-      background: '#f9fafb',
-      minHeight: '100vh',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      padding: '24px 20px'
-    }}>
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
+    if (!accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Access token is required'
+      });
+    }
+
+    console.log('📊 Fetching ad accounts...');
+
+    const accountsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/me/adaccounts`,
+      {
+        params: {
+          fields: 'id,name,currency,account_status',
+          access_token: accessToken
         }
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
+      }
+    );
+
+    const accounts = (accountsResponse.data.data || []).map(account => ({
+      id: account.id,
+      name: account.name,
+      currency: account.currency || 'USD',
+      status: account.account_status
+    }));
+
+    console.log(`✅ Fetched ${accounts.length} ad accounts`);
+    console.log(`📍 Currencies: ${accounts.map(a => `${a.name}=${a.currency}`).join(', ')}\n`);
+
+    res.json({
+      success: true,
+      data: accounts,
+      count: accounts.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad accounts:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: []
+    });
+  }
+});
+
+// Step 4: Fetch campaigns
+app.post('/api/campaigns', async (req, res) => {
+  try {
+    const { adAccountId, accessToken } = req.body;
+
+    if (!adAccountId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adAccountId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching campaigns for account: ${adAccountId}`);
+
+    const campaignsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/act_${adAccountId}/campaigns`,
+      {
+        params: {
+          fields: 'id,name,status,objective,created_time,updated_time',
+          access_token: accessToken
         }
-      `}</style>
-      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '32px',
-          paddingBottom: '24px',
-          borderBottom: '2px solid #e5e7eb'
-        }}>
-          <div>
-            <h1 style={{ fontSize: '32px', fontWeight: '700', margin: 0, color: '#1f2937' }}>
-              📊 Meta Performance Engine
-            </h1>
-            <p style={{ fontSize: '14px', color: '#6b7280', margin: '8px 0 0' }}>
-              Stage 3A, 3B & 3C - Campaigns, Ad Sets & Creatives ✅
-            </p>
-          </div>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: '10px 20px',
-              background: '#ef4444',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '14px'
-            }}
-          >
-            Logout
-          </button>
-        </div>
+      }
+    );
 
-        {error && <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
-        {success && <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#166534', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>{success}</div>}
+    const campaigns = campaignsResponse.data.data || [];
 
-        {/* Account Selector */}
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          border: '1px solid #e5e7eb',
-          marginBottom: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <label style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
-            📍 Select Ad Account
-          </label>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <select
-              value={selectedAccount}
-              onChange={handleAccountChange}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: '#f3f4f6',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                color: '#1f2937',
-                fontSize: '14px',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              <option value="">Choose an ad account...</option>
-              {adAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} ({account.currency || 'USD'})
-                </option>
-              ))}
-            </select>
-            <div style={{
-              background: '#667eea',
-              color: 'white',
-              padding: '10px 16px',
-              borderRadius: '8px',
-              fontWeight: '700',
-              fontSize: '14px',
-              minWidth: '80px',
-              textAlign: 'center'
-            }}>
-              {getCurrencySymbol(selectedAccountCurrency)}
-            </div>
-          </div>
-        </div>
+    console.log(`✅ Fetched ${campaigns.length} campaigns\n`);
 
-        {/* Summary Cards */}
-        {campaigns.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '20px',
-            marginBottom: '32px'
-          }}>
-            {[
-              { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
-              { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
-              { label: summary.totalPurchases > 0 ? 'Total Purchases' : 'Total Leads', value: summary.totalPurchases > 0 ? formatNumber(summary.totalPurchases) : formatNumber(summary.totalLeads), color: '#10b981', icon: summary.totalPurchases > 0 ? '🛒' : '📞' },
-              { label: summary.totalPurchases > 0 ? 'Avg ROAS' : 'Avg CPL', value: summary.totalPurchases > 0 ? `${summary.avgROAS}x` : formatCurrency(summary.avgCPL), color: '#f59e0b', icon: summary.totalPurchases > 0 ? '⭐' : '💵' }
-            ].map((card, i) => (
-              <div key={i} style={{
-                background: 'white',
-                borderRadius: '12px',
-                padding: '24px',
-                border: '1px solid #e5e7eb',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700' }}>{card.label}</p>
-                  <span style={{ fontSize: '28px' }}>{card.icon}</span>
-                </div>
-                {metricsLoading ? (
-                  <SkeletonLoader width="80%" height="32px" />
-                ) : (
-                  <p style={{ margin: 0, fontSize: '32px', fontWeight: '700', color: card.color }}>{card.value}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+    res.json({
+      success: true,
+      data: campaigns,
+      count: campaigns.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching campaigns:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: []
+    });
+  }
+});
 
-        {/* Loading Metrics */}
-        {metricsLoading && (
-          <div style={{
-            background: '#fef3c7',
-            border: '1px solid #fcd34d',
-            color: '#92400e',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            fontSize: '14px',
-            textAlign: 'center'
-          }}>
-            ⏳ Optimizing metrics... (parallel fetching in progress)
-          </div>
-        )}
+// Step 5: Fetch ad sets
+app.post('/api/ad-sets', async (req, res) => {
+  try {
+    const { campaignId, accessToken } = req.body;
 
-        {/* Controls */}
-        {campaigns.length > 0 && (
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '16px',
-            border: '1px solid #e5e7eb',
-            marginBottom: '24px',
-            display: 'flex',
-            gap: '12px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-          }}>
-            <button
-              onClick={() => setShowActiveOnly(!showActiveOnly)}
-              style={{
-                padding: '8px 16px',
-                background: showActiveOnly ? '#667eea' : '#f3f4f6',
-                color: showActiveOnly ? 'white' : '#1f2937',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '600'
-              }}
-            >
-              {showActiveOnly ? '✅ Active Only' : '📋 Show All'}
-            </button>
+    if (!campaignId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'campaignId and accessToken are required'
+      });
+    }
 
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{
-              padding: '8px 12px',
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              color: '#1f2937',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '500'
-            }}>
-              <option value="performance">Sort: Performance</option>
-              <option value="spend">Sort: Spend</option>
-              <option value="impressions">Sort: Impressions</option>
-              <option value="name">Sort: Name</option>
-            </select>
+    console.log(`📊 Fetching ad sets for campaign: ${campaignId}`);
 
-            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-              {['today', 'yesterday', 'mtd', 'qtd', '7', '30', '90'].map(preset => (
-                <button key={preset} onClick={() => handleDatePresetChange(preset)} style={{
-                  padding: '6px 12px',
-                  background: dateRange === preset ? '#667eea' : '#f3f4f6',
-                  border: 'none',
-                  borderRadius: '6px',
-                  color: dateRange === preset ? 'white' : '#1f2937',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}>
-                  {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'mtd' ? 'MTD' : preset === 'qtd' ? 'QTD' : preset + 'D'}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+    const adSetsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${campaignId}/adsets`,
+      {
+        params: {
+          fields: 'id,name,status,daily_budget,lifetime_budget,created_time',
+          access_token: accessToken
+        }
+      }
+    );
 
-        {/* Campaigns List with Ad Sets and Creatives */}
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px', color: '#1f2937' }}>
-            🎯 Campaigns ({filteredCampaigns.length} of {campaigns.length})
-          </h2>
-          {filteredCampaigns.length > 0 ? (
-            <div style={{ display: 'grid', gap: '16px' }}>
-              {filteredCampaigns.map((campaign) => {
-                const metrics = campaignMetrics[campaign.id] || {
-                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-                };
-                const isLeadGen = isLeadGenCampaign(campaign.objective);
-                const performanceColor = getPerformanceColor(campaign.objective, metrics);
-                const performanceLabel = getPerformanceLabel(campaign.objective, metrics);
-                const campaignAdSets = adSets[campaign.id] || [];
+    const adSets = adSetsResponse.data.data || [];
 
-                return (
-                  <div key={campaign.id}>
-                    {/* Campaign Card */}
-                    <div
-                      onClick={() => handleCampaignClick(campaign)}
-                      style={{
-                        background: 'white',
-                        border: expandedCampaign === campaign.id ? '2px solid #667eea' : '1px solid #e5e7eb',
-                        borderRadius: '12px',
-                        padding: '20px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        transition: 'all 0.3s',
-                        boxShadow: expandedCampaign === campaign.id ? '0 4px 12px rgba(102, 126, 234, 0.1)' : '0 1px 3px rgba(0,0,0,0.1)',
-                        backgroundColor: expandedCampaign === campaign.id ? '#f0f4ff' : 'white'
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
-                            {campaign.name}
-                          </h3>
-                          <span style={{
-                            display: 'inline-block',
-                            padding: '4px 10px',
-                            background: campaign.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
-                            border: campaign.status === 'ACTIVE' ? '1px solid #6ee7b7' : '1px solid #d1d5db',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            color: campaign.status === 'ACTIVE' ? '#047857' : '#6b7280'
-                          }}>
-                            {campaign.status}
-                          </span>
-                        </div>
+    console.log(`✅ Fetched ${adSets.length} ad sets\n`);
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginBottom: '8px' }}>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Spend</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Impressions</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'Leads' : 'Purchases'}</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{isLeadGen ? formatNumber(metrics.leads) : formatNumber(metrics.purchases)}</p>}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'CPL' : 'ROAS'}</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{isLeadGen ? formatCurrency(metrics.cpl) : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x`}</p>}
-                          </div>
-                        </div>
+    res.json({
+      success: true,
+      data: adSets,
+      count: adSets.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad sets:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: []
+    });
+  }
+});
 
-                        <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#9ca3af' }}>
-                          {campaign.objective} • {performanceLabel} • 📢 {campaignAdSets.length} Ad Sets
-                        </p>
-                      </div>
+// Step 6: ENHANCED campaign insights with detailed logging and time-series data
+app.post('/api/campaign-insights', async (req, res) => {
+  try {
+    const { campaignId, accessToken, dateStart, dateEnd } = req.body;
 
-                      <span style={{
-                        fontSize: '20px',
-                        color: '#667eea',
-                        transform: expandedCampaign === campaign.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.3s',
-                        marginLeft: '16px'
-                      }}>
-                        ▼
-                      </span>
-                    </div>
+    if (!campaignId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'campaignId and accessToken are required'
+      });
+    }
 
-                    {/* Expanded Campaign - Detailed Metrics + Ad Sets */}
-                    {expandedCampaign === campaign.id && (
-                      <div style={{
-                        background: '#f9fafb',
-                        padding: '20px',
-                        borderRadius: '0 0 12px 12px',
-                        borderLeft: '2px solid #667eea',
-                        borderRight: '2px solid #667eea',
-                        borderBottom: '2px solid #667eea',
-                        marginTop: '-1px'
-                      }}>
-                        {/* Detailed Metrics Grid */}
-                        <div style={{ marginBottom: '24px' }}>
-                          <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>📊 Detailed Metrics</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                            {isLeadGen && [
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Leads', value: formatNumber(metrics.leads), color: '#10b981' },
-                              { label: 'CPL', value: formatCurrency(metrics.cpl), color: performanceColor, highlight: true }
-                            ]?.map((item, i) => (
-                              <div key={i} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                            {!isLeadGen && [
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
-                              { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
-                              { label: 'ROAS', value: (parseFloat(metrics.roas) || 0).toFixed(2) + 'x', color: performanceColor, highlight: true }
-                            ]?.map((item, i) => (
-                              <div key={i} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+    console.log(`\n📊 FETCHING INSIGHTS: Campaign ${campaignId}`);
+    console.log(`📅 Date Range: ${dateStart} to ${dateEnd}`);
 
-                        {/* Ad Sets Section - Stage 3B */}
-                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
-                          <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>
-                            📢 Ad Sets ({campaignAdSets.length})
-                          </h4>
-                          {adSetsLoading[campaign.id] ? (
-                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>Loading ad sets...</p>
-                          ) : campaignAdSets.length > 0 ? (
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                              {campaignAdSets.map((adSet) => {
-                                const adSetMetric = adSetMetrics[adSet.id] || {
-                                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-                                };
-                                const adSetPerformanceColor = getPerformanceColor(campaign.objective, adSetMetric);
-                                const adSetCreatives = adCreatives[adSet.id] || [];
+    // Default dates
+    let start = dateStart;
+    let end = dateEnd;
+    
+    if (!start || !end) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    }
 
-                                return (
-                                  <div key={adSet.id}>
-                                    <div
-                                      onClick={() => handleAdSetClick(adSet.id)}
-                                      style={{
-                                        background: 'white',
-                                        border: expandedCreatives === adSet.id ? '2px solid #10b981' : '1px solid #e5e7eb',
-                                        borderRadius: '8px',
-                                        padding: '16px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        transition: 'all 0.3s'
-                                      }}
-                                    >
-                                      <div style={{ flex: 1 }}>
-                                        <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1f2937', marginBottom: '8px' }}>
-                                          {adSet.name}
-                                        </p>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', fontSize: '12px' }}>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>Spend:</span> <span style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(adSetMetric.spend)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>Impressions:</span> <span style={{ fontWeight: '600', color: '#8b5cf6' }}>{formatNumber(adSetMetric.impressions)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Purchases'}:</span> <span style={{ fontWeight: '600', color: '#10b981' }}>{isLeadGen ? formatNumber(adSetMetric.leads) : formatNumber(adSetMetric.purchases)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span> <span style={{ fontWeight: '600', color: adSetPerformanceColor }}>{isLeadGen ? formatCurrency(adSetMetric.cpl) : `${(parseFloat(adSetMetric.roas) || 0).toFixed(2)}x`}</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <span style={{
-                                        fontSize: '16px',
-                                        color: '#10b981',
-                                        transform: expandedCreatives === adSet.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                                        transition: 'transform 0.3s',
-                                        marginLeft: '12px'
-                                      }}>
-                                        ▼
-                                      </span>
-                                    </div>
+    // REQUEST: Get aggregated insights
+    const insightsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${campaignId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,conversions,conversion_values,date_start,date_stop',
+          time_range: JSON.stringify({
+            since: start,
+            until: end
+          }),
+          access_token: accessToken
+        }
+      }
+    );
 
-                                    {/* Expanded Ad Set - Creatives Section - Stage 3C */}
-                                    {expandedCreatives === adSet.id && (
-                                      <div style={{
-                                        background: 'white',
-                                        padding: '16px',
-                                        borderRadius: '0 0 8px 8px',
-                                        borderLeft: '2px solid #10b981',
-                                        borderRight: '2px solid #10b981',
-                                        borderBottom: '2px solid #10b981',
-                                        marginTop: '-1px',
-                                        marginBottom: '12px'
-                                      }}>
-                                        {/* Ad Set Full Metrics */}
-                                        <div style={{ marginBottom: '16px' }}>
-                                          <h5 style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>Ad Set Performance</h5>
-                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-                                            {isLeadGen && [
-                                              { label: 'Spend', value: formatCurrency(adSetMetric.spend), color: '#3b82f6' },
-                                              { label: 'Impressions', value: formatNumber(adSetMetric.impressions), color: '#8b5cf6' },
-                                              { label: 'Clicks', value: formatNumber(adSetMetric.clicks), color: '#06b6d4' },
-                                              { label: 'CTR', value: (parseFloat(adSetMetric.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                                              { label: 'CPC', value: formatCurrency(adSetMetric.cpc), color: '#ec4899' },
-                                              { label: 'Leads', value: formatNumber(adSetMetric.leads), color: '#10b981' },
-                                              { label: 'CPL', value: formatCurrency(adSetMetric.cpl), color: adSetPerformanceColor, highlight: true }
-                                            ]?.map((item, i) => (
-                                              <div key={i} style={{
-                                                background: '#f9fafb',
-                                                padding: '12px',
-                                                borderRadius: '6px',
-                                                border: item.highlight ? `2px solid ${adSetPerformanceColor}` : '1px solid #e5e7eb',
-                                                fontSize: '11px'
-                                              }}>
-                                                <p style={{ margin: 0, color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>{item.label}</p>
-                                                <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                                              </div>
-                                            ))}
-                                            {!isLeadGen && [
-                                              { label: 'Spend', value: formatCurrency(adSetMetric.spend), color: '#3b82f6' },
-                                              { label: 'Impressions', value: formatNumber(adSetMetric.impressions), color: '#8b5cf6' },
-                                              { label: 'Clicks', value: formatNumber(adSetMetric.clicks), color: '#06b6d4' },
-                                              { label: 'CTR', value: (parseFloat(adSetMetric.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                                              { label: 'CPC', value: formatCurrency(adSetMetric.cpc), color: '#ec4899' },
-                                              { label: 'Purchases', value: formatNumber(adSetMetric.purchases), color: '#10b981' },
-                                              { label: 'Purchase Value', value: formatCurrency(adSetMetric.purchaseValue), color: '#10b981' },
-                                              { label: 'ROAS', value: (parseFloat(adSetMetric.roas) || 0).toFixed(2) + 'x', color: adSetPerformanceColor, highlight: true }
-                                            ]?.map((item, i) => (
-                                              <div key={i} style={{
-                                                background: '#f9fafb',
-                                                padding: '12px',
-                                                borderRadius: '6px',
-                                                border: item.highlight ? `2px solid ${adSetPerformanceColor}` : '1px solid #e5e7eb',
-                                                fontSize: '11px'
-                                              }}>
-                                                <p style={{ margin: 0, color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>{item.label}</p>
-                                                <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
+    const insights = insightsResponse.data.data && insightsResponse.data.data.length > 0 
+      ? insightsResponse.data.data[0]
+      : {};
 
-                                        {/* Creatives Section */}
-                                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
-                                          <h5 style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-                                            🎬 Creatives ({adSetCreatives.length})
-                                          </h5>
-                                          {creativesLoading[adSet.id] ? (
-                                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '12px', fontSize: '12px' }}>Loading creatives...</p>
-                                          ) : adSetCreatives.length > 0 ? (
-                                            <div style={{ display: 'grid', gap: '12px' }}>
-                                              {adSetCreatives.map((creative) => {
-                                                const creativeMetric = creativeMetrics[creative.id] || {
-                                                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                                                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
-                                                };
-                                                const creativePerformanceColor = getPerformanceColor(campaign.objective, creativeMetric);
+    console.log('📋 RAW RESPONSE FROM META:');
+    console.log(JSON.stringify(insights, null, 2));
 
-                                                return (
-                                                  <div key={creative.id} style={{
-                                                    background: '#f9fafb',
-                                                    padding: '12px',
-                                                    borderRadius: '6px',
-                                                    border: '1px solid #e5e7eb',
-                                                    display: 'flex',
-                                                    gap: '12px',
-                                                    alignItems: 'flex-start'
-                                                  }}>
-                                                    {/* Creative Preview */}
-                                                    <CreativePreview creative={creative} />
+    // Parse purchase data - Multiple methods
+    let purchases = 0;
+    let purchaseValue = 0;
+    let leads = 0;
+    let rawROAS = 0;
 
-                                                    {/* Creative Metrics */}
-                                                    <div style={{ flex: 1 }}>
-                                                      <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-                                                        {creative.name || 'Creative'}
-                                                      </p>
-                                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '8px', fontSize: '11px' }}>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Spend:</span> <span style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(creativeMetric.spend)}</span>
-                                                        </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Impressions:</span> <span style={{ fontWeight: '600', color: '#8b5cf6' }}>{formatNumber(creativeMetric.impressions)}</span>
-                                                        </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Clicks:</span> <span style={{ fontWeight: '600', color: '#06b6d4' }}>{formatNumber(creativeMetric.clicks)}</span>
-                                                        </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Freq:</span> <span style={{ fontWeight: '600', color: '#f59e0b' }}>{(parseFloat(creativeMetric.frequency) || 0).toFixed(2)}</span>
-                                                        </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Conv'}:</span> <span style={{ fontWeight: '600', color: '#10b981' }}>{isLeadGen ? formatNumber(creativeMetric.leads) : formatNumber(creativeMetric.purchases)}</span>
-                                                        </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span> <span style={{ fontWeight: '600', color: creativePerformanceColor }}>{isLeadGen ? formatCurrency(creativeMetric.cpl) : `${(parseFloat(creativeMetric.roas) || 0).toFixed(2)}x`}</span>
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          ) : (
-                                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '12px', fontSize: '12px' }}>No creatives found</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>No ad sets found</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No active campaigns found.'}
-            </p>
-          )}
-        </div>
+    // METHOD 1: purchase_roas field
+    if (insights.purchase_roas) {
+      rawROAS = parseFloat(insights.purchase_roas);
+      console.log(`✅ METHOD 1 - Found purchase_roas: ${rawROAS}`);
+    }
 
-        <p style={{
-          fontSize: '12px',
-          color: '#9ca3af',
-          textAlign: 'center',
-          margin: '40px 0 0'
-        }}>
-          🚀 Stage 3A ✅ | Stage 3B ✅ | Stage 3C ✅ | 🔐 Securely connected | Creative previews enabled
-        </p>
-      </div>
-    </div>
-  );
-}
+    // METHOD 2: actions array (purchases or leads)
+    if (insights.actions && Array.isArray(insights.actions)) {
+      console.log(`📋 Actions array found with ${insights.actions.length} items:`);
+      insights.actions.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
+      const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
+      if (purchaseAction) {
+        purchases = parseInt(purchaseAction.value || 0);
+        console.log(`✅ METHOD 2 - Found purchase action: ${purchases}`);
+      }
+
+      const leadsAction = insights.actions.find(a => a.action_type === 'lead');
+      if (leadsAction) {
+        leads = parseInt(leadsAction.value || 0);
+        console.log(`✅ METHOD 2 - Found leads action: ${leads}`);
+      }
+    }
+
+    // METHOD 3: action_values array (purchase values)
+    if (insights.action_values && Array.isArray(insights.action_values)) {
+      console.log(`📋 Action_values array found with ${insights.action_values.length} items:`);
+      insights.action_values.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
+      const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
+      if (purchaseValue_obj) {
+        purchaseValue = parseFloat(purchaseValue_obj.value || 0);
+        console.log(`✅ METHOD 3 - Found purchase value: ${purchaseValue}`);
+      }
+    }
+
+    // METHOD 4: conversion_values array
+    if (purchaseValue === 0 && insights.conversion_values && Array.isArray(insights.conversion_values)) {
+      console.log(`📋 Conversion_values array found with ${insights.conversion_values.length} items:`);
+      insights.conversion_values.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
+      const conversionValue = insights.conversion_values.find(c => c.action_type === 'omni_purchase' || c.action_type === 'purchase');
+      if (conversionValue) {
+        purchaseValue = parseFloat(conversionValue.value || 0);
+        console.log(`✅ METHOD 4 - Found conversion value: ${purchaseValue}`);
+      }
+    }
+
+    // METHOD 5: conversions array
+    if (purchases === 0 && insights.conversions && Array.isArray(insights.conversions)) {
+      console.log(`📋 Conversions array found with ${insights.conversions.length} items:`);
+      insights.conversions.forEach(c => console.log(`   - ${c.action_type}: ${c.value}`));
+      
+      const conversion = insights.conversions.find(c => c.action_type === 'purchase');
+      if (conversion) {
+        purchases = parseInt(conversion.value || 0);
+        console.log(`✅ METHOD 5 - Found conversion count: ${purchases}`);
+      }
+
+      const leadsConversion = insights.conversions.find(c => c.action_type === 'lead');
+      if (leadsConversion) {
+        leads = parseInt(leadsConversion.value || 0);
+        console.log(`✅ METHOD 5 - Found leads conversion: ${leads}`);
+      }
+    }
+
+    // Calculate ROAS and CPL
+    const spend = parseFloat(insights.spend || 0);
+    let roas = 0;
+    let cpl = 0;
+    
+    if (rawROAS > 0) {
+      roas = rawROAS.toFixed(2);
+      console.log(`💰 ROAS from Meta: ${roas}`);
+    } else if (spend > 0 && purchaseValue > 0) {
+      roas = (purchaseValue / spend).toFixed(2);
+      console.log(`💰 ROAS calculated: ${roas}`);
+    }
+
+    if (leads > 0 && spend > 0) {
+      cpl = (spend / leads).toFixed(2);
+      console.log(`💰 CPL calculated: ${cpl}`);
+    }
+
+    console.log(`\n✅ FINAL METRICS:`);
+    console.log(`   Spend: ${spend}`);
+    console.log(`   Impressions: ${parseInt(insights.impressions || 0)}`);
+    console.log(`   Clicks: ${parseInt(insights.clicks || 0)}`);
+    console.log(`   CTR: ${parseFloat(insights.ctr || 0).toFixed(2)}`);
+    console.log(`   CPC: ${parseFloat(insights.cpc || 0).toFixed(2)}`);
+    console.log(`   Purchases: ${purchases}`);
+    console.log(`   Purchase Value: ${purchaseValue}`);
+    console.log(`   Leads: ${leads}`);
+    console.log(`   CPL: ${cpl}`);
+    console.log(`   ROAS: ${roas}\n`);
+
+    res.json({
+      success: true,
+      data: {
+        campaignId: campaignId,
+        spend: spend,
+        impressions: parseInt(insights.impressions || 0),
+        clicks: parseInt(insights.clicks || 0),
+        ctr: parseFloat(insights.ctr || 0).toFixed(2),
+        cpc: parseFloat(insights.cpc || 0).toFixed(2),
+        purchases: purchases,
+        purchaseValue: purchaseValue,
+        roas: roas,
+        leads: leads,
+        cpl: cpl,
+        dateRange: { start, end },
+        rawData: {
+          actions: insights.actions || [],
+          action_values: insights.action_values || [],
+          conversions: insights.conversions || [],
+          conversion_values: insights.conversion_values || []
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching campaign insights:', error.response?.data?.error?.message || error.message);
+    console.error('Full error:', error.response?.data);
+    
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: {}
+    });
+  }
+});
+
+// Step 7: Fetch ad set insights (Stage 3B)
+app.post('/api/adset-insights', async (req, res) => {
+  try {
+    const { adSetId, accessToken, dateStart, dateEnd } = req.body;
+
+    if (!adSetId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adSetId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching insights for ad set: ${adSetId}`);
+
+    let start = dateStart;
+    let end = dateEnd;
+    
+    if (!start || !end) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    }
+
+    const insightsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${adSetId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas',
+          time_range: JSON.stringify({
+            since: start,
+            until: end
+          }),
+          access_token: accessToken
+        }
+      }
+    );
+
+    const insights = insightsResponse.data.data && insightsResponse.data.data.length > 0 
+      ? insightsResponse.data.data[0]
+      : {};
+
+    let purchases = 0;
+    let purchaseValue = 0;
+
+    if (insights.actions && Array.isArray(insights.actions)) {
+      const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
+      if (purchaseAction) {
+        purchases = parseInt(purchaseAction.value || 0);
+      }
+    }
+
+    if (insights.action_values && Array.isArray(insights.action_values)) {
+      const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
+      if (purchaseValue_obj) {
+        purchaseValue = parseFloat(purchaseValue_obj.value || 0);
+      }
+    }
+
+    const spend = parseFloat(insights.spend || 0);
+    const roas = spend > 0 ? (purchaseValue / spend).toFixed(2) : 0;
+
+    console.log(`✅ Fetched insights for ad set ${adSetId}\n`);
+
+    res.json({
+      success: true,
+      data: {
+        adSetId: adSetId,
+        spend: spend,
+        impressions: parseInt(insights.impressions || 0),
+        clicks: parseInt(insights.clicks || 0),
+        ctr: parseFloat(insights.ctr || 0).toFixed(2),
+        cpc: parseFloat(insights.cpc || 0).toFixed(2),
+        purchases: purchases,
+        purchaseValue: purchaseValue,
+        roas: roas,
+        dateRange: { start, end }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad set insights:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: {}
+    });
+  }
+});
+
+// Step 7B: Fetch ads/creatives under ad set (Stage 3C)
+app.post('/api/ads', async (req, res) => {
+  try {
+    const { adSetId, accessToken } = req.body;
+
+    if (!adSetId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adSetId and accessToken are required'
+      });
+    }
+
+    console.log(`\n📊 Fetching ads/creatives for ad set: ${adSetId}`);
+
+    const adsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
+      {
+        params: {
+          fields: 'id,name,status,created_time,adset_id,creative{id,name,object_story_spec,video_data}',
+          access_token: accessToken
+        }
+      }
+    );
+
+    console.log(`📋 Raw API Response:`, JSON.stringify(adsResponse.data, null, 2));
+
+    let ads = adsResponse.data.data || [];
+    console.log(`✅ Found ${ads.length} ads in ad set`);
+
+    // Extract image/video URLs from creative objects
+    const adsWithCreativeUrls = ads.map((ad) => {
+      console.log(`\n🔍 Processing ad: ${ad.id} - ${ad.name}`);
+      
+      let imageUrl = null;
+      let videoUrl = null;
+      let creativeType = 'UNKNOWN';
+
+      if (ad.creative) {
+        console.log(`   Creative ID: ${ad.creative.id}`);
+        
+        // Determine creative type based on available data
+        if (ad.creative.video_data) {
+          creativeType = 'VIDEO';
+          console.log(`   Type: VIDEO (has video_data)`);
+        } else if (ad.creative.object_story_spec) {
+          creativeType = 'STATIC';
+          console.log(`   Type: STATIC (has object_story_spec)`);
+        }
+        
+        // Parse object_story_spec to extract media URL
+        if (ad.creative.object_story_spec) {
+          console.log(`   Has object_story_spec`);
+          const spec = ad.creative.object_story_spec;
+          
+          // For feed posts (most common)
+          if (spec.link_data?.image_hash) {
+            console.log(`   Found image_hash: ${spec.link_data.image_hash}`);
+            imageUrl = `https://www.facebook.com/ads/library/?ad_type=all&country=US&q=${spec.link_data.image_hash}`;
+          }
+          if (spec.link_data?.image_url) {
+            console.log(`   Found image_url: ${spec.link_data.image_url}`);
+            imageUrl = spec.link_data.image_url;
+          }
+          if (spec.link_data?.message) {
+            console.log(`   Found message: ${spec.link_data.message.substring(0, 50)}...`);
+            ad.creativeText = spec.link_data.message;
+          }
+        } else {
+          console.log(`   No object_story_spec found`);
+        }
+
+        // For video creatives
+        if (ad.creative.video_data?.video_url) {
+          console.log(`   Found video_url: ${ad.creative.video_data.video_url}`);
+          videoUrl = ad.creative.video_data.video_url;
+          creativeType = 'VIDEO';
+        }
+        if (ad.creative.video_data?.image) {
+          console.log(`   Found video thumbnail: ${ad.creative.video_data.image}`);
+          imageUrl = ad.creative.video_data.image;
+        }
+      } else {
+        console.log(`   ⚠️ No creative data attached to ad`);
+      }
+
+      console.log(`   Final imageUrl: ${imageUrl}`);
+      console.log(`   Final videoUrl: ${videoUrl}`);
+      console.log(`   Final type: ${creativeType}`);
+
+      return {
+        ...ad,
+        creativeData: {
+          ...ad.creative,
+          imageUrl: imageUrl,
+          videoUrl: videoUrl,
+          type: creativeType,
+          displayUrl: imageUrl || videoUrl
+        }
+      };
+    });
+
+    console.log(`\n✅ Fetched ${adsWithCreativeUrls.length} ads/creatives with media URLs\n`);
+
+    res.json({
+      success: true,
+      data: adsWithCreativeUrls,
+      count: adsWithCreativeUrls.length
+    });
+  } catch (error) {
+    console.error('\n❌ Error fetching ads:');
+    console.error('   Message:', error.message);
+    console.error('   Status:', error.response?.status);
+    console.error('   Data:', error.response?.data);
+    
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
+// Step 8: Fetch creative insights (Stage 3C)
+app.post('/api/creative-insights', async (req, res) => {
+  try {
+    const { adId, accessToken, dateStart, dateEnd } = req.body;
+
+    if (!adId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching insights for creative: ${adId}`);
+
+    let start = dateStart;
+    let end = dateEnd;
+    
+    if (!start || !end) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    }
+
+    const insightsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${adId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,frequency',
+          time_range: JSON.stringify({
+            since: start,
+            until: end
+          }),
+          access_token: accessToken
+        }
+      }
+    );
+
+    const insights = insightsResponse.data.data && insightsResponse.data.data.length > 0 
+      ? insightsResponse.data.data[0]
+      : {};
+
+    let purchases = 0;
+    let purchaseValue = 0;
+
+    if (insights.actions && Array.isArray(insights.actions)) {
+      const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
+      if (purchaseAction) {
+        purchases = parseInt(purchaseAction.value || 0);
+      }
+    }
+
+    if (insights.action_values && Array.isArray(insights.action_values)) {
+      const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
+      if (purchaseValue_obj) {
+        purchaseValue = parseFloat(purchaseValue_obj.value || 0);
+      }
+    }
+
+    const spend = parseFloat(insights.spend || 0);
+    const roas = spend > 0 ? (purchaseValue / spend).toFixed(2) : 0;
+
+    console.log(`✅ Fetched insights for creative ${adId}\n`);
+
+    res.json({
+      success: true,
+      data: {
+        adId: adId,
+        spend: spend,
+        impressions: parseInt(insights.impressions || 0),
+        clicks: parseInt(insights.clicks || 0),
+        ctr: parseFloat(insights.ctr || 0).toFixed(2),
+        cpc: parseFloat(insights.cpc || 0).toFixed(2),
+        purchases: purchases,
+        purchaseValue: purchaseValue,
+        roas: roas,
+        frequency: parseFloat(insights.frequency || 0).toFixed(2),
+        dateRange: { start, end }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching creative insights:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: {}
+    });
+  }
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err.message);
+  res.status(500).json({ success: false, error: err.message });
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(`📍 GET /api/health - Health check`);
+  console.log(`📍 GET /api/auth/login-url - OAuth login`);
+  console.log(`📍 GET /api/auth/callback - OAuth callback`);
+  console.log(`📍 POST /api/ad-accounts - Get ad accounts`);
+  console.log(`📍 POST /api/campaigns - Get campaigns`);
+  console.log(`📍 POST /api/ad-sets - Get ad sets`);
+  console.log(`📍 POST /api/ads - Get ads/creatives under ad set`);
+  console.log(`📍 POST /api/campaign-insights - Get campaign metrics (with detailed logging)`);
+  console.log(`📍 POST /api/adset-insights - Get ad set metrics`);
+  console.log(`📍 POST /api/creative-insights - Get creative metrics\n`);
+});
