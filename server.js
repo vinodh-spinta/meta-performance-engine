@@ -491,6 +491,48 @@ app.post('/api/adset-insights', async (req, res) => {
   }
 });
 
+// Step 7B: Fetch ads/creatives under ad set (Stage 3C)
+app.post('/api/ads', async (req, res) => {
+  try {
+    const { adSetId, accessToken } = req.body;
+
+    if (!adSetId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adSetId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching ads/creatives for ad set: ${adSetId}`);
+
+    const adsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
+      {
+        params: {
+          fields: 'id,name,status,created_time,adset_id',
+          access_token: accessToken
+        }
+      }
+    );
+
+    const ads = adsResponse.data.data || [];
+
+    console.log(`✅ Fetched ${ads.length} ads/creatives\n`);
+
+    res.json({
+      success: true,
+      data: ads,
+      count: ads.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ads:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
 // Step 8: Fetch creative insights (Stage 3C)
 app.post('/api/creative-insights', async (req, res) => {
   try {
