@@ -27,87 +27,134 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
   }} />
 );
 
-// Creative Preview Component - Shows actual creative image/video with type badge
-const CreativePreview = ({ creative }) => {
-  const creativeData = creative.creativeData || {};
-  const imageUrl = creativeData.imageUrl;
-  const videoUrl = creativeData.videoUrl;
-  const creativeType = creativeData.type || 'UNKNOWN';
+// Creative Card Component - Shows ad copy and creative info
+const CreativeCard = ({ creative, isLeadGen, performanceColor }) => {
+  const creativeData = creative.creativeData || creative;
+  const adCopy = creative.adCopy || 'No copy available';
+  const headline = creative.headline || '';
+  const creativeType = creative.creativeType || 'UNKNOWN';
   
   const typeIcons = {
     'STATIC': '🖼️',
-    'CAROUSEL': '📸',
     'VIDEO': '🎥',
-    'VIDEO_SLIDESHOW': '🎬',
-    'COLLECTION': '📚',
-    'CAROUSEL_VIDEO': '🎥',
-    'UNKNOWN': '📌'
+    'CAROUSEL': '📸',
+    'UNKNOWN': '📌',
+    'NONE': '❌',
+    'ERROR': '⚠️'
   };
 
-  const icon = typeIcons[creativeType] || typeIcons['UNKNOWN'];
-  const displayUrl = imageUrl || videoUrl;
-
-  console.log(`🎨 CreativePreview for ${creative.name}:`, { imageUrl, videoUrl, displayUrl, creativeType });
+  const icon = typeIcons[creativeType] || '📌';
+  const truncatedCopy = adCopy.substring(0, 120) + (adCopy.length > 120 ? '...' : '');
 
   return (
     <div style={{
-      width: '100px',
-      height: '100px',
-      backgroundImage: displayUrl ? `url("${displayUrl}")` : 'none',
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundColor: displayUrl ? 'transparent' : '#f3f4f6',
-      background: displayUrl 
-        ? `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), url("${displayUrl}") center/cover no-repeat`
-        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      borderRadius: '8px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative',
-      flexShrink: 0,
-      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+      background: '#f9fafb',
+      padding: '12px',
+      borderRadius: '6px',
       border: '1px solid #e5e7eb',
-      overflow: 'hidden'
+      display: 'grid',
+      gridTemplateColumns: '60px 1fr',
+      gap: '12px',
+      alignItems: 'flex-start'
     }}>
-      {!displayUrl && (
-        <span style={{ fontSize: '36px' }}>{icon}</span>
-      )}
-      {videoUrl && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '8px'
-        }}>
-          <span style={{ fontSize: '32px', color: 'white' }}>▶</span>
-        </div>
-      )}
-      <span style={{
-        position: 'absolute',
-        bottom: '-8px',
-        right: '-8px',
-        background: '#fff',
-        border: '2px solid #667eea',
-        borderRadius: '50%',
-        width: '28px',
-        height: '28px',
+      {/* Creative Type Badge */}
+      <div style={{
+        width: '60px',
+        height: '60px',
+        background: 'white',
+        border: '2px solid #e5e7eb',
+        borderRadius: '6px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '12px',
-        fontWeight: '700',
-        color: '#667eea',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        fontSize: '28px',
+        position: 'relative',
+        flexShrink: 0
       }}>
-        {creativeType === 'VIDEO' ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
-      </span>
+        {icon}
+        <span style={{
+          position: 'absolute',
+          bottom: '-8px',
+          right: '-8px',
+          background: '#fff',
+          border: '2px solid #667eea',
+          borderRadius: '50%',
+          width: '24px',
+          height: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '10px',
+          fontWeight: '700',
+          color: '#667eea',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+        }}>
+          {creativeType === 'VIDEO' ? '🎥' : '📌'}
+        </span>
+      </div>
+
+      {/* Creative Details */}
+      <div style={{ flex: 1 }}>
+        <div style={{ marginBottom: '8px' }}>
+          <p style={{ margin: '0 0 4px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
+            {creative.name || 'Ad ' + creative.id}
+          </p>
+          <span style={{
+            display: 'inline-block',
+            padding: '2px 8px',
+            background: '#f3f4f6',
+            border: '1px solid #d1d5db',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '600',
+            color: '#6b7280',
+            marginRight: '6px'
+          }}>
+            {creativeType}
+          </span>
+          <span style={{
+            display: 'inline-block',
+            padding: '2px 8px',
+            background: creative.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
+            border: creative.status === 'ACTIVE' ? '1px solid #6ee7b7' : '1px solid #d1d5db',
+            borderRadius: '4px',
+            fontSize: '10px',
+            fontWeight: '600',
+            color: creative.status === 'ACTIVE' ? '#047857' : '#6b7280'
+          }}>
+            {creative.status}
+          </span>
+        </div>
+
+        {/* Ad Copy Display */}
+        <p style={{
+          margin: '8px 0',
+          fontSize: '12px',
+          lineHeight: '1.4',
+          color: '#374151',
+          background: '#fff',
+          padding: '8px',
+          borderRadius: '4px',
+          border: '1px solid #f3f4f6',
+          fontStyle: 'italic'
+        }}>
+          "{truncatedCopy}"
+        </p>
+
+        {headline && (
+          <p style={{
+            margin: '6px 0',
+            fontSize: '11px',
+            color: '#6b7280',
+            background: '#f0f4ff',
+            padding: '6px',
+            borderRadius: '4px',
+            borderLeft: '3px solid #667eea'
+          }}>
+            <strong>Headline:</strong> {headline}
+          </p>
+        )}
+      </div>
     </div>
   );
 };
@@ -1258,7 +1305,7 @@ export default function App() {
                                                     alignItems: 'flex-start'
                                                   }}>
                                                     {/* Creative Preview */}
-                                                    <CreativePreview creative={creative} />
+                                                    <CreativeCard creative={creative} isLeadGen={isLeadGen} performanceColor={creativePerformanceColor} />
 
                                                     {/* Creative Metrics */}
                                                     <div style={{ flex: 1 }}>
