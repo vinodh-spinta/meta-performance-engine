@@ -247,6 +247,7 @@ export default function App() {
     }
   };
 
+  /* eslint-disable-next-line no-loop-func */
   const handleCustomDateApply = () => {
     if (customDateStart && customDateEnd && campaigns.length > 0) {
       setDateRange('custom');
@@ -255,7 +256,7 @@ export default function App() {
       const metricsMap = {};
       let completedCount = 0;
 
-      campaigns.forEach((campaign, index) => {
+      campaigns.forEach((campaign) => {
         fetch(`${API_URL}/api/campaign-insights`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
