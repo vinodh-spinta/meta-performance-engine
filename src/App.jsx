@@ -2,6 +2,31 @@ import React, { useState, useEffect } from 'react';
 
 const API_URL = 'https://meta-performance-engine-production.up.railway.app';
 
+// Skeleton Loader Component
+const SkeletonLoader = ({ width = '100%', height = '24px', style = {} }) => (
+  <div style={{
+    background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 2s infinite',
+    width,
+    height,
+    borderRadius: '6px',
+    ...style
+  }} />
+);
+
+// Loading Spinner Component
+const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
+  <div style={{
+    width: size,
+    height: size,
+    border: `4px solid ${color}20`,
+    borderTop: `4px solid ${color}`,
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite'
+  }} />
+);
+
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [accessToken, setAccessToken] = useState('');
@@ -22,6 +47,7 @@ export default function App() {
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [sortBy, setSortBy] = useState('performance');
+  const [loggingIn, setLoggingIn] = useState(false);
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
@@ -367,6 +393,7 @@ export default function App() {
   };
 
   const handleLogin = async () => {
+    setLoggingIn(true);
     try {
       const response = await fetch(`${API_URL}/api/auth/login-url`);
       const data = await response.json();
@@ -375,6 +402,7 @@ export default function App() {
       }
     } catch (err) {
       setError(`Error: ${err.message}`);
+      setLoggingIn(false);
     }
   };
 
@@ -442,6 +470,24 @@ export default function App() {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         padding: '20px'
       }}>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+          }
+          @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
         <div style={{
           background: 'white',
           borderRadius: '16px',
@@ -449,7 +495,8 @@ export default function App() {
           maxWidth: '420px',
           width: '100%',
           boxShadow: '0 25px 50px rgba(0,0,0,0.2)',
-          textAlign: 'center'
+          textAlign: 'center',
+          animation: 'slideInUp 0.5s ease-out'
         }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
           <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#1f2937', margin: '0 0 8px' }}>
@@ -463,19 +510,32 @@ export default function App() {
           </p>
           <button
             onClick={handleLogin}
+            disabled={loggingIn}
             style={{
               width: '100%',
               padding: '14px',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: loggingIn ? '#999' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
               fontWeight: '700',
-              cursor: 'pointer',
-              fontSize: '16px'
+              cursor: loggingIn ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              transition: 'all 0.3s'
             }}
           >
-            🔐 Login with Meta
+            {loggingIn ? (
+              <>
+                <LoadingSpinner size="20px" color="white" />
+                Connecting to Meta...
+              </>
+            ) : (
+              <>🔐 Login with Meta</>
+            )}
           </button>
           {error && <p style={{ fontSize: '12px', color: '#dc2626', margin: '16px 0 0', background: '#fee2e2', padding: '8px', borderRadius: '6px' }}>{error}</p>}
         </div>
@@ -588,6 +648,12 @@ export default function App() {
             gap: '20px',
             marginBottom: '32px'
           }}>
+            <style>{`
+              @keyframes shimmer {
+                0% { background-position: -200% 0; }
+                100% { background-position: 200% 0; }
+              }
+            `}</style>
             {[
               { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
               { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
@@ -605,7 +671,11 @@ export default function App() {
                   <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700' }}>{card.label}</p>
                   <span style={{ fontSize: '28px' }}>{card.icon}</span>
                 </div>
-                <p style={{ margin: 0, fontSize: '32px', fontWeight: '700', color: card.color }}>{card.value}</p>
+                {metricsLoading ? (
+                  <SkeletonLoader width="80%" height="32px" />
+                ) : (
+                  <p style={{ margin: 0, fontSize: '32px', fontWeight: '700', color: card.color }}>{card.value}</p>
+                )}
               </div>
             ))}
           </div>
@@ -802,19 +872,19 @@ export default function App() {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginBottom: '8px' }}>
                           <div>
                             <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Spend</p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>
+                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>}
                           </div>
                           <div>
                             <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Impressions</p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>
+                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>}
                           </div>
                           <div>
                             <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'Leads' : 'Purchases'}</p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{isLeadGen ? formatNumber(metrics.leads) : formatNumber(metrics.purchases)}</p>
+                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{isLeadGen ? formatNumber(metrics.leads) : formatNumber(metrics.purchases)}</p>}
                           </div>
                           <div>
                             <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'CPL' : 'ROAS'}</p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{isLeadGen ? formatCurrency(metrics.cpl) : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x`}</p>
+                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{isLeadGen ? formatCurrency(metrics.cpl) : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x`}</p>}
                           </div>
                         </div>
 
