@@ -27,33 +27,60 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
   }} />
 );
 
-// Creative Preview Component - Shows creative as placeholder with type badge
-const CreativePreview = ({ creative, type = 'image' }) => {
-  const creativeTypeIcons = {
-    'image': '🖼️',
-    'video': '🎥',
-    'carousel': '📸',
-    'collection': '📚',
-    'slideshow': '🎬',
-    'default': '📌'
+// Creative Preview Component - Shows actual creative image/video with type badge
+const CreativePreview = ({ creative }) => {
+  const creativeData = creative.creativeData || {};
+  const imageUrl = creativeData.image_url;
+  const videoData = creativeData.video_data;
+  const creativeType = creativeData.type || 'STATIC';
+  
+  const typeIcons = {
+    'STATIC': '🖼️',
+    'CAROUSEL': '📸',
+    'VIDEO': '🎥',
+    'VIDEO_SLIDESHOW': '🎬',
+    'COLLECTION': '📚',
+    'CAROUSEL_VIDEO': '🎥'
   };
 
-  const icon = creativeTypeIcons[type] || creativeTypeIcons['default'];
+  const icon = typeIcons[creativeType] || typeIcons['STATIC'];
 
   return (
     <div style={{
-      width: '80px',
-      height: '80px',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      width: '100px',
+      height: '100px',
+      background: imageUrl 
+        ? `url(${imageUrl}) center/cover no-repeat` 
+        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       borderRadius: '8px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       position: 'relative',
       flexShrink: 0,
-      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+      border: '1px solid #e5e7eb',
+      overflow: 'hidden'
     }}>
-      <span style={{ fontSize: '32px' }}>{icon}</span>
+      {!imageUrl && (
+        <span style={{ fontSize: '36px' }}>{icon}</span>
+      )}
+      {videoData && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '8px'
+        }}>
+          <span style={{ fontSize: '32px' }}>▶</span>
+        </div>
+      )}
       <span style={{
         position: 'absolute',
         bottom: '-8px',
@@ -61,16 +88,17 @@ const CreativePreview = ({ creative, type = 'image' }) => {
         background: '#fff',
         border: '2px solid #667eea',
         borderRadius: '50%',
-        width: '24px',
-        height: '24px',
+        width: '28px',
+        height: '28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontSize: '12px',
         fontWeight: '700',
-        color: '#667eea'
+        color: '#667eea',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
       }}>
-        {type === 'video' ? '▶' : type === 'carousel' ? '✕' : '◻'}
+        {creativeType === 'VIDEO' ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
       </span>
     </div>
   );
@@ -1211,7 +1239,7 @@ export default function App() {
                                                     alignItems: 'flex-start'
                                                   }}>
                                                     {/* Creative Preview */}
-                                                    <CreativePreview creative={creative} type="image" />
+                                                    <CreativePreview creative={creative} />
 
                                                     {/* Creative Metrics */}
                                                     <div style={{ flex: 1 }}>
