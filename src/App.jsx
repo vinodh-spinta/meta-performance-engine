@@ -30,9 +30,9 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
 // Creative Preview Component - Shows actual creative image/video with type badge
 const CreativePreview = ({ creative }) => {
   const creativeData = creative.creativeData || {};
-  const imageUrl = creativeData.image_url;
-  const videoData = creativeData.video_data;
-  const creativeType = creativeData.type || 'STATIC';
+  const imageUrl = creativeData.imageUrl || creativeData.image_url;
+  const videoUrl = creativeData.videoUrl || creativeData.video_url;
+  const creativeType = creativeData.type || 'UNKNOWN';
   
   const typeIcons = {
     'STATIC': '🖼️',
@@ -40,18 +40,21 @@ const CreativePreview = ({ creative }) => {
     'VIDEO': '🎥',
     'VIDEO_SLIDESHOW': '🎬',
     'COLLECTION': '📚',
-    'CAROUSEL_VIDEO': '🎥'
+    'CAROUSEL_VIDEO': '🎥',
+    'UNKNOWN': '📌'
   };
 
-  const icon = typeIcons[creativeType] || typeIcons['STATIC'];
+  const icon = typeIcons[creativeType] || typeIcons['UNKNOWN'];
+  const displayUrl = imageUrl || videoUrl;
 
   return (
     <div style={{
       width: '100px',
       height: '100px',
-      background: imageUrl 
-        ? `url(${imageUrl}) center/cover no-repeat` 
+      background: displayUrl 
+        ? `url("${displayUrl}") center/cover no-repeat` 
         : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      backgroundColor: displayUrl ? 'transparent' : undefined,
       borderRadius: '8px',
       display: 'flex',
       alignItems: 'center',
@@ -62,10 +65,10 @@ const CreativePreview = ({ creative }) => {
       border: '1px solid #e5e7eb',
       overflow: 'hidden'
     }}>
-      {!imageUrl && (
+      {!displayUrl && (
         <span style={{ fontSize: '36px' }}>{icon}</span>
       )}
-      {videoData && (
+      {videoUrl && displayUrl === videoUrl && (
         <div style={{
           position: 'absolute',
           top: 0,
@@ -78,7 +81,7 @@ const CreativePreview = ({ creative }) => {
           justifyContent: 'center',
           borderRadius: '8px'
         }}>
-          <span style={{ fontSize: '32px' }}>▶</span>
+          <span style={{ fontSize: '32px', color: 'white' }}>▶</span>
         </div>
       )}
       <span style={{
@@ -98,7 +101,7 @@ const CreativePreview = ({ creative }) => {
         color: '#667eea',
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
       }}>
-        {creativeType === 'VIDEO' ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
+        {creativeType === 'VIDEO' || videoUrl ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
       </span>
     </div>
   );
