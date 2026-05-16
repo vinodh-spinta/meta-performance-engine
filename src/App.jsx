@@ -384,7 +384,7 @@ export default function App() {
   const fetchCreatives = async (adSetId, token) => {
     setCreativesLoading(prev => ({ ...prev, [adSetId]: true }));
     try {
-      const response = await fetch(`${API_URL}/api/ad-sets`, {
+      const response = await fetch(`${API_URL}/api/ads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adSetId, accessToken: token })
