@@ -293,14 +293,8 @@ export default function App() {
       const data = await response.json();
       if (data.success) {
         setAdAccounts(data.data || []);
-        setSuccess(`✅ Found ${data.count} ad accounts`);
-        if (data.data && data.data.length > 0) {
-          const firstAccount = data.data[0];
-          setSelectedAccount(firstAccount.id);
-          setSelectedAccountCurrency(firstAccount.currency || 'USD');
-          console.log(`Selected currency: ${firstAccount.currency}`);
-          fetchCampaigns(firstAccount.id.replace('act_', ''), token);
-        }
+        setSuccess(`✅ Found ${data.count} ad accounts. Select one to view campaigns.`);
+        // Don't auto-select or auto-fetch - let user choose
       } else {
         setError(`Failed: ${data.error}`);
       }
@@ -319,7 +313,7 @@ export default function App() {
     if (token) {
       setAccessToken(token);
       setLoggedIn(true);
-      setSuccess('✅ Logged in successfully');
+      setSuccess('✅ Logged in successfully! Select an ad account to view campaigns.');
       fetchAdAccounts(token);
       window.history.replaceState({}, document.title, window.location.pathname);
     } else if (errorMsg) {
@@ -383,19 +377,28 @@ export default function App() {
   };
 
   const calculateSummary = () => {
-    let totalSpend = 0, totalImpressions = 0, totalPurchases = 0, totalLeads = 0, totalPurchaseValue = 0;
+    let totalSpend = 0, totalImpressions = 0;
+    let totalPurchases = 0, totalPurchaseValue = 0;
+    let totalLeads = 0;
+    
     filteredCampaigns.forEach(campaign => {
       if (campaignMetrics[campaign.id]) {
         const m = campaignMetrics[campaign.id];
         totalSpend += parseFloat(m.spend) || 0;
         totalImpressions += parseInt(m.impressions) || 0;
-        totalPurchases += parseInt(m.purchases) || 0;
-        totalLeads += parseInt(m.leads) || 0;
-        totalPurchaseValue += parseFloat(m.purchaseValue) || 0;
+        
+        if (isLeadGenCampaign(campaign.objective)) {
+          totalLeads += parseInt(m.leads) || 0;
+        } else {
+          totalPurchases += parseInt(m.purchases) || 0;
+          totalPurchaseValue += parseFloat(m.purchaseValue) || 0;
+        }
       }
     });
-    const avgROAS = totalSpend > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
-    const avgCPL = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : 0;
+
+    const avgROAS = totalSpend > 0 && totalPurchaseValue > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
+    const avgCPL = totalLeads > 0 && totalSpend > 0 ? (totalSpend / totalLeads).toFixed(2) : 0;
+    
     return { totalSpend, totalImpressions, totalPurchases, totalLeads, totalPurchaseValue, avgROAS, avgCPL };
   };
 
@@ -559,8 +562,8 @@ export default function App() {
             {[
               { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
               { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
-              { label: 'Purchases', value: formatNumber(summary.totalPurchases), color: '#10b981', icon: '🛒' },
-              { label: 'Leads', value: formatNumber(summary.totalLeads), color: '#f59e0b', icon: '📞' }
+              { label: summary.totalPurchases > 0 ? 'Total Purchases' : 'Total Leads', value: summary.totalPurchases > 0 ? formatNumber(summary.totalPurchases) : formatNumber(summary.totalLeads), color: '#10b981', icon: summary.totalPurchases > 0 ? '🛒' : '📞' },
+              { label: summary.totalPurchases > 0 ? 'Avg ROAS' : 'Avg CPL', value: summary.totalPurchases > 0 ? `${summary.avgROAS}x` : formatCurrency(summary.avgCPL), color: '#f59e0b', icon: summary.totalPurchases > 0 ? '⭐' : '💵' }
             ].map((card, i) => (
               <div key={i} style={{
                 background: 'white',
