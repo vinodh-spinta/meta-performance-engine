@@ -147,13 +147,12 @@ export default function App() {
 
     const metricsMap = {};
     let completedCount = 0;
+    const totalCampaigns = campaignsArray.length;
 
     // Fetch in parallel for speed (max 5 at a time)
     const chunkSize = 5;
-    for (let i = 0; i < campaignsArray.length; i += chunkSize) {
-      const chunk = campaignsArray.slice(i, i + chunkSize);
-      
-      await Promise.all(chunk.map(async (campaign) => {
+    const fetchChunk = async (chunk) => {
+      return Promise.all(chunk.map(async (campaign) => {
         try {
           const response = await fetch(`${API_URL}/api/campaign-insights`, {
             method: 'POST',
@@ -177,7 +176,7 @@ export default function App() {
             };
           }
           completedCount++;
-          setSuccess(`✅ Loading metrics... ${completedCount}/${campaignsArray.length}`);
+          setSuccess(`✅ Loading metrics... ${completedCount}/${totalCampaigns}`);
         } catch (err) {
           console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
           metricsMap[campaign.id] = {
@@ -193,6 +192,12 @@ export default function App() {
           completedCount++;
         }
       }));
+    };
+
+    // eslint-disable-next-line no-loop-func
+    for (let i = 0; i < campaignsArray.length; i += chunkSize) {
+      const chunk = campaignsArray.slice(i, i + chunkSize);
+      await fetchChunk(chunk);
     }
 
     setCampaignMetrics(metricsMap);
