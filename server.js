@@ -16,33 +16,37 @@ const META_APP_ID = process.env.META_APP_ID || '1601962987562179';
 const META_APP_SECRET = process.env.META_APP_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://meta-performance-engine-production.up.railway.app/api/auth/callback';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://meta-performance-engine-ads.vercel.app';
+const API_VERSION = process.env.META_API_VERSION || 'v18.0';
 
-console.log('=== META PERFORMANCE ENGINE - OAUTH PRODUCTION ===');
-console.log('✅ App ID:', META_APP_ID);
-console.log('✅ Redirect URI:', REDIRECT_URI);
-console.log('✅ Frontend URL:', FRONTEND_URL);
-console.log('✅ Ready for OAuth flow\n');
+console.log('\n🚀 META PERFORMANCE ENGINE - PRODUCTION BACKEND');
+console.log('=' .repeat(50));
+console.log(`✅ App ID: ${META_APP_ID}`);
+console.log(`✅ API Version: ${API_VERSION}`);
+console.log(`✅ Redirect URI: ${REDIRECT_URI}`);
+console.log(`✅ Frontend URL: ${FRONTEND_URL}`);
+console.log('=' .repeat(50) + '\n');
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date(),
-    message: 'Backend is running with OAuth enabled'
+    message: 'Backend is running with enhanced logging',
+    version: API_VERSION
   });
 });
 
 // Step 1: Generate OAuth login URL
 app.get('/api/auth/login-url', (req, res) => {
-  const loginUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=ads_management,ads_read,business_management&state=random_state_string`;
-
+  const loginUrl = `https://www.facebook.com/${API_VERSION}/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=ads_management,ads_read,business_management&state=random_state_string`;
+  
   res.json({
     success: true,
     url: loginUrl
   });
 });
 
-// Step 2: Handle OAuth callback and exchange code for token
+// Step 2: Handle OAuth callback
 app.get('/api/auth/callback', async (req, res) => {
   try {
     const { code, error } = req.query;
@@ -56,11 +60,10 @@ app.get('/api/auth/callback', async (req, res) => {
       return res.redirect(`${FRONTEND_URL}?error=No+authorization+code`);
     }
 
-    console.log('🔐 OAuth callback received, exchanging code for token...');
+    console.log('🔐 OAuth callback - exchanging code for token...');
 
-    // Exchange code for access token
     const tokenResponse = await axios.post(
-      'https://graph.facebook.com/v18.0/oauth/access_token',
+      `https://graph.facebook.com/${API_VERSION}/oauth/access_token`,
       {
         client_id: META_APP_ID,
         client_secret: META_APP_SECRET,
@@ -70,9 +73,8 @@ app.get('/api/auth/callback', async (req, res) => {
     );
 
     const accessToken = tokenResponse.data.access_token;
-    console.log('✅ Access token obtained from Meta');
+    console.log('✅ Access token obtained\n');
 
-    // Redirect to frontend with token
     res.redirect(`${FRONTEND_URL}?token=${accessToken}`);
   } catch (error) {
     console.error('❌ OAuth error:', error.response?.data || error.message);
@@ -80,7 +82,7 @@ app.get('/api/auth/callback', async (req, res) => {
   }
 });
 
-// Step 3: Fetch ad accounts for authenticated user
+// Step 3: Fetch ad accounts
 app.post('/api/ad-accounts', async (req, res) => {
   try {
     const { accessToken } = req.body;
@@ -92,41 +94,44 @@ app.post('/api/ad-accounts', async (req, res) => {
       });
     }
 
-    console.log('📊 Fetching ad accounts for user...');
+    console.log('📊 Fetching ad accounts...');
 
-    // Fetch ad accounts
     const accountsResponse = await axios.get(
-      'https://graph.facebook.com/v18.0/me/adaccounts',
+      `https://graph.facebook.com/${API_VERSION}/me/adaccounts`,
       {
         params: {
-          fields: 'id,name,account_id,business_name',
+          fields: 'id,name,currency,account_status',
           access_token: accessToken
         }
       }
     );
 
-    const adAccounts = accountsResponse.data.data || [];
-    console.log(`✅ Fetched ${adAccounts.length} ad accounts\n`);
+    const accounts = (accountsResponse.data.data || []).map(account => ({
+      id: account.id,
+      name: account.name,
+      currency: account.currency || 'USD',
+      status: account.account_status
+    }));
+
+    console.log(`✅ Fetched ${accounts.length} ad accounts`);
+    console.log(`📍 Currencies: ${accounts.map(a => `${a.name}=${a.currency}`).join(', ')}\n`);
 
     res.json({
       success: true,
-      data: adAccounts,
-      count: adAccounts.length
+      data: accounts,
+      count: accounts.length
     });
   } catch (error) {
     console.error('❌ Error fetching ad accounts:', error.response?.data?.error?.message || error.message);
-    
-    const errorMessage = error.response?.data?.error?.message || error.message;
-    
     res.status(500).json({
       success: false,
-      error: errorMessage,
+      error: error.response?.data?.error?.message || error.message,
       data: []
     });
   }
 });
 
-// Step 4: Fetch campaigns for selected ad account
+// Step 4: Fetch campaigns
 app.post('/api/campaigns', async (req, res) => {
   try {
     const { adAccountId, accessToken } = req.body;
@@ -140,18 +145,18 @@ app.post('/api/campaigns', async (req, res) => {
 
     console.log(`📊 Fetching campaigns for account: ${adAccountId}`);
 
-    // Fetch campaigns
     const campaignsResponse = await axios.get(
-      `https://graph.facebook.com/v18.0/act_${adAccountId}/campaigns`,
+      `https://graph.facebook.com/${API_VERSION}/act_${adAccountId}/campaigns`,
       {
         params: {
-          fields: 'id,name,objective,status,created_time,updated_time',
+          fields: 'id,name,status,objective,created_time,updated_time',
           access_token: accessToken
         }
       }
     );
 
     const campaigns = campaignsResponse.data.data || [];
+
     console.log(`✅ Fetched ${campaigns.length} campaigns\n`);
 
     res.json({
@@ -161,18 +166,15 @@ app.post('/api/campaigns', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching campaigns:', error.response?.data?.error?.message || error.message);
-    
-    const errorMessage = error.response?.data?.error?.message || error.message;
-    
     res.status(500).json({
       success: false,
-      error: errorMessage,
+      error: error.response?.data?.error?.message || error.message,
       data: []
     });
   }
 });
 
-// Step 5: Fetch ad sets for a campaign
+// Step 5: Fetch ad sets
 app.post('/api/ad-sets', async (req, res) => {
   try {
     const { campaignId, accessToken } = req.body;
@@ -187,16 +189,17 @@ app.post('/api/ad-sets', async (req, res) => {
     console.log(`📊 Fetching ad sets for campaign: ${campaignId}`);
 
     const adSetsResponse = await axios.get(
-      `https://graph.facebook.com/v18.0/${campaignId}/adsets`,
+      `https://graph.facebook.com/${API_VERSION}/${campaignId}/adsets`,
       {
         params: {
-          fields: 'id,name,status,created_time',
+          fields: 'id,name,status,daily_budget,lifetime_budget,created_time',
           access_token: accessToken
         }
       }
     );
 
     const adSets = adSetsResponse.data.data || [];
+
     console.log(`✅ Fetched ${adSets.length} ad sets\n`);
 
     res.json({
@@ -214,7 +217,7 @@ app.post('/api/ad-sets', async (req, res) => {
   }
 });
 
-// Step 6: Fetch campaign insights (metrics like spend, impressions, etc)
+// Step 6: ENHANCED campaign insights with detailed logging and time-series data
 app.post('/api/campaign-insights', async (req, res) => {
   try {
     const { campaignId, accessToken, dateStart, dateEnd } = req.body;
@@ -226,9 +229,10 @@ app.post('/api/campaign-insights', async (req, res) => {
       });
     }
 
-    console.log(`📊 Fetching insights for campaign: ${campaignId}`);
+    console.log(`\n📊 FETCHING INSIGHTS: Campaign ${campaignId}`);
+    console.log(`📅 Date Range: ${dateStart} to ${dateEnd}`);
 
-    // Default to last 30 days if no dates provided
+    // Default dates
     let start = dateStart;
     let end = dateEnd;
     
@@ -239,11 +243,12 @@ app.post('/api/campaign-insights', async (req, res) => {
       end = endDate.toISOString().split('T')[0];
     }
 
+    // REQUEST: Get aggregated insights
     const insightsResponse = await axios.get(
-      `https://graph.facebook.com/v18.0/${campaignId}/insights`,
+      `https://graph.facebook.com/${API_VERSION}/${campaignId}/insights`,
       {
         params: {
-          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,conversions',
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,conversions,conversion_values,date_start,date_stop',
           time_range: JSON.stringify({
             since: start,
             until: end
@@ -257,31 +262,297 @@ app.post('/api/campaign-insights', async (req, res) => {
       ? insightsResponse.data.data[0]
       : {};
 
-    console.log(`✅ Fetched insights for campaign ${campaignId}\n`);
+    console.log('📋 RAW RESPONSE FROM META:');
+    console.log(JSON.stringify(insights, null, 2));
+
+    // Parse purchase data - Multiple methods
+    let purchases = 0;
+    let purchaseValue = 0;
+    let rawROAS = 0;
+
+    // METHOD 1: purchase_roas field
+    if (insights.purchase_roas) {
+      rawROAS = parseFloat(insights.purchase_roas);
+      console.log(`✅ METHOD 1 - Found purchase_roas: ${rawROAS}`);
+    }
+
+    // METHOD 2: actions array (purchases)
+    if (insights.actions && Array.isArray(insights.actions)) {
+      console.log(`📋 Actions array found with ${insights.actions.length} items:`);
+      insights.actions.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
+      const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
+      if (purchaseAction) {
+        purchases = parseInt(purchaseAction.value || 0);
+        console.log(`✅ METHOD 2 - Found purchase action: ${purchases}`);
+      }
+    }
+
+    // METHOD 3: action_values array (purchase values)
+    if (insights.action_values && Array.isArray(insights.action_values)) {
+      console.log(`📋 Action_values array found with ${insights.action_values.length} items:`);
+      insights.action_values.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
+      const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
+      if (purchaseValue_obj) {
+        purchaseValue = parseFloat(purchaseValue_obj.value || 0);
+        console.log(`✅ METHOD 3 - Found purchase value: ${purchaseValue}`);
+      }
+    }
+
+    // METHOD 4: conversion_values array
+    if (purchaseValue === 0 && insights.conversion_values && Array.isArray(insights.conversion_values)) {
+      console.log(`📋 Conversion_values array found with ${insights.conversion_values.length} items:`);
+      insights.conversion_values.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
+      const conversionValue = insights.conversion_values.find(c => c.action_type === 'omni_purchase' || c.action_type === 'purchase');
+      if (conversionValue) {
+        purchaseValue = parseFloat(conversionValue.value || 0);
+        console.log(`✅ METHOD 4 - Found conversion value: ${purchaseValue}`);
+      }
+    }
+
+    // METHOD 5: conversions array
+    if (purchases === 0 && insights.conversions && Array.isArray(insights.conversions)) {
+      console.log(`📋 Conversions array found with ${insights.conversions.length} items:`);
+      insights.conversions.forEach(c => console.log(`   - ${c.action_type}: ${c.value}`));
+      
+      const conversion = insights.conversions.find(c => c.action_type === 'purchase');
+      if (conversion) {
+        purchases = parseInt(conversion.value || 0);
+        console.log(`✅ METHOD 5 - Found conversion count: ${purchases}`);
+      }
+    }
+
+    // Calculate ROAS
+    const spend = parseFloat(insights.spend || 0);
+    let roas = 0;
+    
+    if (rawROAS > 0) {
+      roas = rawROAS.toFixed(2);
+      console.log(`💰 ROAS from Meta: ${roas}`);
+    } else if (spend > 0 && purchaseValue > 0) {
+      roas = (purchaseValue / spend).toFixed(2);
+      console.log(`💰 ROAS calculated: ${roas}`);
+    }
+
+    console.log(`\n✅ FINAL METRICS:`);
+    console.log(`   Spend: ${spend}`);
+    console.log(`   Impressions: ${parseInt(insights.impressions || 0)}`);
+    console.log(`   Clicks: ${parseInt(insights.clicks || 0)}`);
+    console.log(`   CTR: ${parseFloat(insights.ctr || 0).toFixed(2)}`);
+    console.log(`   CPC: ${parseFloat(insights.cpc || 0).toFixed(2)}`);
+    console.log(`   Purchases: ${purchases}`);
+    console.log(`   Purchase Value: ${purchaseValue}`);
+    console.log(`   ROAS: ${roas}\n`);
 
     res.json({
       success: true,
       data: {
         campaignId: campaignId,
-        spend: parseFloat(insights.spend || 0),
+        spend: spend,
         impressions: parseInt(insights.impressions || 0),
         clicks: parseInt(insights.clicks || 0),
-        ctr: parseFloat(insights.ctr || 0),
-        cpc: parseFloat(insights.cpc || 0),
-        conversions: parseInt(insights.conversions || 0),
-        actions: insights.actions || [],
-        action_values: insights.action_values || [],
-        dateRange: { start, end }
+        ctr: parseFloat(insights.ctr || 0).toFixed(2),
+        cpc: parseFloat(insights.cpc || 0).toFixed(2),
+        purchases: purchases,
+        purchaseValue: purchaseValue,
+        roas: roas,
+        dateRange: { start, end },
+        rawData: {
+          actions: insights.actions || [],
+          action_values: insights.action_values || [],
+          conversions: insights.conversions || [],
+          conversion_values: insights.conversion_values || []
+        }
       }
     });
   } catch (error) {
     console.error('❌ Error fetching campaign insights:', error.response?.data?.error?.message || error.message);
-    
-    const errorMessage = error.response?.data?.error?.message || error.message;
+    console.error('Full error:', error.response?.data);
     
     res.status(500).json({
       success: false,
-      error: errorMessage,
+      error: error.response?.data?.error?.message || error.message,
+      data: {}
+    });
+  }
+});
+
+// Step 7: Fetch ad set insights (Stage 3B)
+app.post('/api/adset-insights', async (req, res) => {
+  try {
+    const { adSetId, accessToken, dateStart, dateEnd } = req.body;
+
+    if (!adSetId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adSetId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching insights for ad set: ${adSetId}`);
+
+    let start = dateStart;
+    let end = dateEnd;
+    
+    if (!start || !end) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    }
+
+    const insightsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${adSetId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas',
+          time_range: JSON.stringify({
+            since: start,
+            until: end
+          }),
+          access_token: accessToken
+        }
+      }
+    );
+
+    const insights = insightsResponse.data.data && insightsResponse.data.data.length > 0 
+      ? insightsResponse.data.data[0]
+      : {};
+
+    let purchases = 0;
+    let purchaseValue = 0;
+
+    if (insights.actions && Array.isArray(insights.actions)) {
+      const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
+      if (purchaseAction) {
+        purchases = parseInt(purchaseAction.value || 0);
+      }
+    }
+
+    if (insights.action_values && Array.isArray(insights.action_values)) {
+      const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
+      if (purchaseValue_obj) {
+        purchaseValue = parseFloat(purchaseValue_obj.value || 0);
+      }
+    }
+
+    const spend = parseFloat(insights.spend || 0);
+    const roas = spend > 0 ? (purchaseValue / spend).toFixed(2) : 0;
+
+    console.log(`✅ Fetched insights for ad set ${adSetId}\n`);
+
+    res.json({
+      success: true,
+      data: {
+        adSetId: adSetId,
+        spend: spend,
+        impressions: parseInt(insights.impressions || 0),
+        clicks: parseInt(insights.clicks || 0),
+        ctr: parseFloat(insights.ctr || 0).toFixed(2),
+        cpc: parseFloat(insights.cpc || 0).toFixed(2),
+        purchases: purchases,
+        purchaseValue: purchaseValue,
+        roas: roas,
+        dateRange: { start, end }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad set insights:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
+      data: {}
+    });
+  }
+});
+
+// Step 8: Fetch creative insights (Stage 3C)
+app.post('/api/creative-insights', async (req, res) => {
+  try {
+    const { adId, accessToken, dateStart, dateEnd } = req.body;
+
+    if (!adId || !accessToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'adId and accessToken are required'
+      });
+    }
+
+    console.log(`📊 Fetching insights for creative: ${adId}`);
+
+    let start = dateStart;
+    let end = dateEnd;
+    
+    if (!start || !end) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    }
+
+    const insightsResponse = await axios.get(
+      `https://graph.facebook.com/${API_VERSION}/${adId}/insights`,
+      {
+        params: {
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,frequency',
+          time_range: JSON.stringify({
+            since: start,
+            until: end
+          }),
+          access_token: accessToken
+        }
+      }
+    );
+
+    const insights = insightsResponse.data.data && insightsResponse.data.data.length > 0 
+      ? insightsResponse.data.data[0]
+      : {};
+
+    let purchases = 0;
+    let purchaseValue = 0;
+
+    if (insights.actions && Array.isArray(insights.actions)) {
+      const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
+      if (purchaseAction) {
+        purchases = parseInt(purchaseAction.value || 0);
+      }
+    }
+
+    if (insights.action_values && Array.isArray(insights.action_values)) {
+      const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
+      if (purchaseValue_obj) {
+        purchaseValue = parseFloat(purchaseValue_obj.value || 0);
+      }
+    }
+
+    const spend = parseFloat(insights.spend || 0);
+    const roas = spend > 0 ? (purchaseValue / spend).toFixed(2) : 0;
+
+    console.log(`✅ Fetched insights for creative ${adId}\n`);
+
+    res.json({
+      success: true,
+      data: {
+        adId: adId,
+        spend: spend,
+        impressions: parseInt(insights.impressions || 0),
+        clicks: parseInt(insights.clicks || 0),
+        ctr: parseFloat(insights.ctr || 0).toFixed(2),
+        cpc: parseFloat(insights.cpc || 0).toFixed(2),
+        purchases: purchases,
+        purchaseValue: purchaseValue,
+        roas: roas,
+        frequency: parseFloat(insights.frequency || 0).toFixed(2),
+        dateRange: { start, end }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching creative insights:', error.response?.data?.error?.message || error.message);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error?.message || error.message,
       data: {}
     });
   }
@@ -289,17 +560,20 @@ app.post('/api/campaign-insights', async (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message);
+  console.error('❌ Error:', err.message);
   res.status(500).json({ success: false, error: err.message });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
-  console.log(`📍 GET /api/auth/login-url - Generate OAuth login URL`);
-  console.log(`📍 GET /api/auth/callback - OAuth callback (Meta redirects here)`);
-  console.log(`📍 POST /api/ad-accounts - Fetch user's ad accounts`);
-  console.log(`📍 POST /api/campaigns - Fetch campaigns for account`);
-  console.log(`📍 POST /api/ad-sets - Fetch ad sets for campaign`);
-  console.log(`📍 POST /api/campaign-insights - Fetch campaign metrics (spend, impressions, etc)\n`);
+  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(`📍 GET /api/health - Health check`);
+  console.log(`📍 GET /api/auth/login-url - OAuth login`);
+  console.log(`📍 GET /api/auth/callback - OAuth callback`);
+  console.log(`📍 POST /api/ad-accounts - Get ad accounts`);
+  console.log(`📍 POST /api/campaigns - Get campaigns`);
+  console.log(`📍 POST /api/ad-sets - Get ad sets`);
+  console.log(`📍 POST /api/campaign-insights - Get campaign metrics (with detailed logging)`);
+  console.log(`📍 POST /api/adset-insights - Get ad set metrics`);
+  console.log(`📍 POST /api/creative-insights - Get creative metrics\n`);
 });
