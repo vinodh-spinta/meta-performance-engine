@@ -21,7 +21,7 @@ export default function App() {
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
-  const [sortBy, setSortBy] = useState('roas');
+  const [sortBy, setSortBy] = useState('performance');
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
@@ -31,24 +31,56 @@ export default function App() {
     return symbols[currency] || currency;
   };
 
-  const getPerformanceColor = (roas) => {
-    const roasValue = parseFloat(roas) || 0;
-    if (roasValue >= 3) return '#8b5cf6';
-    if (roasValue >= 2) return '#10b981';
-    if (roasValue >= 1.5) return '#3b82f6';
-    if (roasValue >= 1) return '#f59e0b';
-    if (roasValue > 0) return '#ef4444';
-    return '#6b7280';
+  // Detect campaign type
+  const isLeadGenCampaign = (objective) => {
+    const leadObjectives = ['LEAD_GENERATION', 'MESSAGES', 'OUTCOME_LEADS'];
+    return leadObjectives.includes(objective);
   };
 
-  const getPerformanceLabel = (roas) => {
-    const roasValue = parseFloat(roas) || 0;
-    if (roasValue >= 3) return '🌟 Exceptional';
-    if (roasValue >= 2) return '✨ Excellent';
-    if (roasValue >= 1.5) return '👍 Good';
-    if (roasValue >= 1) return '⚠️ Fair';
-    if (roasValue > 0) return '❌ Poor';
-    return '📊 No Data';
+  const isEcommerceCampaign = (objective) => {
+    const ecommerceObjectives = ['SALES', 'PRODUCT_CATALOG_SALES', 'CONVERSIONS', 'OUTCOME_SALES'];
+    return ecommerceObjectives.includes(objective);
+  };
+
+  // Get performance color and label based on campaign type
+  const getPerformanceColor = (objective, metrics) => {
+    if (isLeadGenCampaign(objective)) {
+      const cpl = parseFloat(metrics?.cpl) || 0;
+      if (cpl === 0) return '#6b7280';
+      if (cpl <= 5) return '#8b5cf6';
+      if (cpl <= 10) return '#10b981';
+      if (cpl <= 25) return '#3b82f6';
+      if (cpl <= 50) return '#f59e0b';
+      return '#ef4444';
+    } else {
+      const roas = parseFloat(metrics?.roas) || 0;
+      if (roas >= 3) return '#8b5cf6';
+      if (roas >= 2) return '#10b981';
+      if (roas >= 1.5) return '#3b82f6';
+      if (roas >= 1) return '#f59e0b';
+      if (roas > 0) return '#ef4444';
+      return '#6b7280';
+    }
+  };
+
+  const getPerformanceLabel = (objective, metrics) => {
+    if (isLeadGenCampaign(objective)) {
+      const cpl = parseFloat(metrics?.cpl) || 0;
+      if (cpl === 0) return '📊 No Data';
+      if (cpl <= 5) return '🌟 Excellent CPL';
+      if (cpl <= 10) return '✨ Good CPL';
+      if (cpl <= 25) return '👍 Fair CPL';
+      if (cpl <= 50) return '⚠️ High CPL';
+      return '❌ Very High CPL';
+    } else {
+      const roas = parseFloat(metrics?.roas) || 0;
+      if (roas >= 3) return '🌟 Exceptional';
+      if (roas >= 2) return '✨ Excellent';
+      if (roas >= 1.5) return '👍 Good';
+      if (roas >= 1) return '⚠️ Fair';
+      if (roas > 0) return '❌ Poor';
+      return '📊 No Data';
+    }
   };
 
   const getDateRange = (preset) => {
@@ -73,11 +105,18 @@ export default function App() {
   const sortCampaigns = (campaignsToSort) => {
     const sorted = [...campaignsToSort];
     switch (sortBy) {
-      case 'roas':
-        sorted.sort((a, b) => (parseFloat(campaignMetrics[b.id]?.roas) || 0) - (parseFloat(campaignMetrics[a.id]?.roas) || 0));
-        break;
-      case 'purchases':
-        sorted.sort((a, b) => (parseInt(campaignMetrics[b.id]?.purchases) || 0) - (parseInt(campaignMetrics[a.id]?.purchases) || 0));
+      case 'performance':
+        sorted.sort((a, b) => {
+          const metricsA = campaignMetrics[a.id] || {};
+          const metricsB = campaignMetrics[b.id] || {};
+          
+          if (isLeadGenCampaign(a.objective) && isLeadGenCampaign(b.objective)) {
+            return (parseFloat(metricsA.cpl) || Infinity) - (parseFloat(metricsB.cpl) || Infinity);
+          } else if (isEcommerceCampaign(a.objective) && isEcommerceCampaign(b.objective)) {
+            return (parseFloat(metricsB.roas) || 0) - (parseFloat(metricsA.roas) || 0);
+          }
+          return 0;
+        });
         break;
       case 'spend':
         sorted.sort((a, b) => (parseFloat(campaignMetrics[b.id]?.spend) || 0) - (parseFloat(campaignMetrics[a.id]?.spend) || 0));
@@ -118,7 +157,6 @@ export default function App() {
         setCampaigns(data.data || []);
         setCampaignMetrics({});
         setSuccess(`✅ Loaded ${data.count} campaigns. Fetching metrics...`);
-        // Auto-fetch metrics for all campaigns
         fetchAllCampaignMetrics(data.data || [], token, dateRange);
       } else {
         setError(`Failed: ${data.error}`);
@@ -146,39 +184,20 @@ export default function App() {
     }
 
     const metricsMap = {};
-    let completedCount = 0;
-    const totalCampaigns = campaignsArray.length;
 
-    // Fetch in parallel for speed (max 5 at a time)
-    const chunkSize = 5;
-    const fetchChunk = async (chunk) => {
-      return Promise.all(chunk.map(async (campaign) => {
-        try {
-          const response = await fetch(`${API_URL}/api/campaign-insights`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
-          });
-          const data = await response.json();
-          
-          if (data.success) {
-            metricsMap[campaign.id] = data.data;
-          } else {
-            metricsMap[campaign.id] = {
-              spend: 0,
-              impressions: 0,
-              clicks: 0,
-              ctr: 0,
-              cpc: 0,
-              purchases: 0,
-              purchaseValue: 0,
-              roas: 0
-            };
-          }
-          completedCount++;
-          setSuccess(`✅ Loading metrics... ${completedCount}/${totalCampaigns}`);
-        } catch (err) {
-          console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
+    // Fetch all campaigns in parallel (faster)
+    const promises = campaignsArray.map(async (campaign, index) => {
+      try {
+        const response = await fetch(`${API_URL}/api/campaign-insights`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          metricsMap[campaign.id] = data.data;
+        } else {
           metricsMap[campaign.id] = {
             spend: 0,
             impressions: 0,
@@ -187,19 +206,30 @@ export default function App() {
             cpc: 0,
             purchases: 0,
             purchaseValue: 0,
-            roas: 0
+            roas: 0,
+            leads: 0,
+            cpl: 0
           };
-          completedCount++;
         }
-      }));
-    };
+        setSuccess(`✅ Loading metrics... ${index + 1}/${campaignsArray.length}`);
+      } catch (err) {
+        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
+        metricsMap[campaign.id] = {
+          spend: 0,
+          impressions: 0,
+          clicks: 0,
+          ctr: 0,
+          cpc: 0,
+          purchases: 0,
+          purchaseValue: 0,
+          roas: 0,
+          leads: 0,
+          cpl: 0
+        };
+      }
+    });
 
-    // eslint-disable-next-line no-loop-func
-    for (let i = 0; i < campaignsArray.length; i += chunkSize) {
-      const chunk = campaignsArray.slice(i, i + chunkSize);
-      await fetchChunk(chunk);
-    }
-
+    await Promise.all(promises);
     setCampaignMetrics(metricsMap);
     setMetricsLoading(false);
     setSuccess(`✅ All metrics loaded!`);
@@ -225,7 +255,7 @@ export default function App() {
       const metricsMap = {};
       let completedCount = 0;
 
-      campaigns.forEach(campaign => {
+      campaigns.forEach((campaign, index) => {
         fetch(`${API_URL}/api/campaign-insights`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -306,7 +336,7 @@ export default function App() {
     setCampaignMetrics({});
     setExpandedCampaign(null);
     setShowActiveOnly(true);
-    setSortBy('roas');
+    setSortBy('performance');
     if (accessToken) {
       fetchCampaigns(accountId, accessToken);
     }
@@ -337,7 +367,7 @@ export default function App() {
     setError('');
     setSuccess('');
     setShowActiveOnly(true);
-    setSortBy('roas');
+    setSortBy('performance');
   };
 
   const formatCurrency = (value) => {
@@ -352,18 +382,20 @@ export default function App() {
   };
 
   const calculateSummary = () => {
-    let totalSpend = 0, totalImpressions = 0, totalPurchases = 0, totalPurchaseValue = 0;
+    let totalSpend = 0, totalImpressions = 0, totalPurchases = 0, totalLeads = 0, totalPurchaseValue = 0;
     filteredCampaigns.forEach(campaign => {
       if (campaignMetrics[campaign.id]) {
         const m = campaignMetrics[campaign.id];
         totalSpend += parseFloat(m.spend) || 0;
         totalImpressions += parseInt(m.impressions) || 0;
         totalPurchases += parseInt(m.purchases) || 0;
+        totalLeads += parseInt(m.leads) || 0;
         totalPurchaseValue += parseFloat(m.purchaseValue) || 0;
       }
     });
     const avgROAS = totalSpend > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
-    return { totalSpend, totalImpressions, totalPurchases, totalPurchaseValue, avgROAS };
+    const avgCPL = totalLeads > 0 ? (totalSpend / totalLeads).toFixed(2) : 0;
+    return { totalSpend, totalImpressions, totalPurchases, totalLeads, totalPurchaseValue, avgROAS, avgCPL };
   };
 
   if (!loggedIn) {
@@ -527,7 +559,7 @@ export default function App() {
               { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
               { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
               { label: 'Purchases', value: formatNumber(summary.totalPurchases), color: '#10b981', icon: '🛒' },
-              { label: 'Avg ROAS', value: (parseFloat(summary.avgROAS) || 0).toFixed(2) + 'x', color: '#f59e0b', icon: '⭐' }
+              { label: 'Leads', value: formatNumber(summary.totalLeads), color: '#f59e0b', icon: '📞' }
             ].map((card, i) => (
               <div key={i} style={{
                 background: 'white',
@@ -602,8 +634,7 @@ export default function App() {
               fontSize: '13px',
               fontWeight: '500'
             }}>
-              <option value="roas">Sort: ROAS ⭐</option>
-              <option value="purchases">Sort: Purchases</option>
+              <option value="performance">Sort: Performance</option>
               <option value="spend">Sort: Spend</option>
               <option value="impressions">Sort: Impressions</option>
               <option value="name">Sort: Name</option>
@@ -690,11 +721,15 @@ export default function App() {
                   cpc: 0,
                   purchases: 0,
                   purchaseValue: 0,
-                  roas: 0
+                  roas: 0,
+                  leads: 0,
+                  cpl: 0
                 };
-                const roas = parseFloat(metrics?.roas) || 0;
-                const performanceColor = getPerformanceColor(roas);
-                const performanceLabel = getPerformanceLabel(roas);
+                const isLeadGen = isLeadGenCampaign(campaign.objective);
+                const performanceColor = getPerformanceColor(campaign.objective, metrics);
+                const performanceLabel = getPerformanceLabel(campaign.objective, metrics);
+                const mainMetricValue = isLeadGen ? `${formatNumber(metrics.leads)} leads` : `${formatCurrency(metrics.purchaseValue)} rev`;
+                const secondaryMetricValue = isLeadGen ? `${formatCurrency(metrics.cpl)} CPL` : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x ROAS`;
 
                 return (
                   <div key={campaign.id}>
@@ -743,12 +778,12 @@ export default function App() {
                             <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>
                           </div>
                           <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Purchases</p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{formatNumber(metrics.purchases)}</p>
+                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'Leads' : 'Purchases'}</p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{isLeadGen ? formatNumber(metrics.leads) : formatNumber(metrics.purchases)}</p>
                           </div>
                           <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>ROAS</p>
-                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{(parseFloat(metrics.roas) || 0).toFixed(2)}x</p>
+                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'CPL' : 'ROAS'}</p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{isLeadGen ? formatCurrency(metrics.cpl) : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x`}</p>
                           </div>
                         </div>
 
@@ -778,7 +813,15 @@ export default function App() {
                         marginTop: '-1px'
                       }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                          {[
+                          {isLeadGen ? [
+                            { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
+                            { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
+                            { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
+                            { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
+                            { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
+                            { label: 'Leads', value: formatNumber(metrics.leads), color: '#10b981' },
+                            { label: 'CPL', value: formatCurrency(metrics.cpl), color: performanceColor, highlight: true }
+                          ] : [
                             { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
                             { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
                             { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
@@ -818,7 +861,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          🔐 Securely connected | Real-time data | Currency: {selectedAccountCurrency} | Optimized parallel fetching
+          🔐 Securely connected | Real-time data | Currency: {selectedAccountCurrency} | Smart campaign detection
         </p>
       </div>
     </div>
