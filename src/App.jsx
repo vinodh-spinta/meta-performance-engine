@@ -21,7 +21,7 @@ export default function App() {
   const [customDateStart, setCustomDateStart] = useState('');
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
-  const [showActiveOnly, setShowActiveOnly] = useState(false);
+  const [showActiveOnly, setShowActiveOnly] = useState(true); // DEFAULT TO TRUE
   const [sortBy, setSortBy] = useState('roas');
 
   const getCurrencySymbol = (currency) => {
@@ -132,12 +132,17 @@ export default function App() {
   const fetchCampaignMetrics = async (campaignId, token, dateStart, dateEnd) => {
     setMetricsLoading(true);
     try {
+      console.log('Fetching metrics for campaign:', campaignId, 'from', dateStart, 'to', dateEnd);
+      
       const response = await fetch(`${API_URL}/api/campaign-insights`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignId, accessToken: token, dateStart, dateEnd })
       });
       const data = await response.json();
+      
+      console.log('Response:', data);
+      
       if (data.success) {
         setCampaignMetrics(prev => ({ ...prev, [campaignId]: data.data }));
       } else {
@@ -217,6 +222,7 @@ export default function App() {
         if (data.data && data.data.length > 0) {
           setSelectedAccount(data.data[0].id);
           setSelectedAccountCurrency(data.data[0].currency || 'USD');
+          console.log('Selected currency:', data.data[0].currency);
           fetchCampaigns(data.data[0].id.replace('act_', ''), token);
         }
       } else {
@@ -250,9 +256,10 @@ export default function App() {
     const account = adAccounts.find(a => a.id === accountId);
     setSelectedAccount(accountId);
     setSelectedAccountCurrency(account?.currency || 'USD');
+    console.log('Account currency:', account?.currency);
     setCampaignMetrics({});
     setExpandedCampaign(null);
-    setShowActiveOnly(false);
+    setShowActiveOnly(true);
     setSortBy('roas');
     if (accessToken) {
       fetchCampaigns(accountId, accessToken);
@@ -283,7 +290,7 @@ export default function App() {
     setExpandedCampaign(null);
     setError('');
     setSuccess('');
-    setShowActiveOnly(false);
+    setShowActiveOnly(true);
     setSortBy('roas');
   };
 
@@ -419,7 +426,7 @@ export default function App() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }}>
           <label style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
-            📍 Select Ad Account
+            📍 Select Ad Account ({selectedAccountCurrency})
           </label>
           <select
             value={selectedAccount}
@@ -490,10 +497,22 @@ export default function App() {
             alignItems: 'center',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer', fontWeight: '500' }}>
-              <input type="checkbox" checked={showActiveOnly} onChange={(e) => setShowActiveOnly(e.target.checked)} style={{ cursor: 'pointer' }} />
-              Active Only
-            </label>
+            <button
+              onClick={() => setShowActiveOnly(!showActiveOnly)}
+              style={{
+                padding: '8px 16px',
+                background: showActiveOnly ? '#667eea' : '#f3f4f6',
+                color: showActiveOnly ? 'white' : '#1f2937',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: '600'
+              }}
+            >
+              {showActiveOnly ? '✅ Active Only' : '📋 Show All'}
+            </button>
+
             <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{
               padding: '8px 12px',
               background: '#f3f4f6',
@@ -710,7 +729,7 @@ export default function App() {
             </div>
           ) : (
             <p style={{ color: '#9ca3af', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No campaigns match your filters.'}
+              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No active campaigns found. Click "Show All" to see paused campaigns.'}
             </p>
           )}
         </div>
@@ -721,7 +740,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          🔐 Securely connected | Real-time data | Updated {new Date().toLocaleTimeString()}
+          🔐 Securely connected | Real-time data | Currency: {selectedAccountCurrency}
         </p>
       </div>
     </div>
