@@ -228,6 +228,7 @@ export default function App() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const fetchAdAccounts = React.useCallback(async (token) => {
     setLoading(true);
     setError('');
