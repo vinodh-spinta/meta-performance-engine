@@ -355,7 +355,6 @@ export default function App() {
 
   const handleDatePresetChange = (preset) => {
     setDateRange(preset);
-    setShowCustomDatePicker(false);
     if (campaigns.length > 0) {
       fetchAllCampaignMetrics(campaigns, accessToken, preset);
     }
@@ -444,8 +443,6 @@ export default function App() {
     setExpandedAdSets(null);
     setAdSets({});
     setAdSetMetrics({});
-    setCreatives({});
-    setCreativeMetrics({});
     setError('');
     setSuccess('');
     setShowActiveOnly(true);
