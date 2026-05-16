@@ -203,6 +203,14 @@ export default function App() {
       try {
         const data = await fetchWithTimeout(campaign);
         
+        // Debug: Log what we get back
+        console.log(`📊 Campaign: ${campaign.name} (${campaign.objective})`);
+        console.log(`   Response:`, data);
+        if (data.data) {
+          console.log(`   Leads: ${data.data.leads}, CPL: ${data.data.cpl}`);
+          console.log(`   Purchases: ${data.data.purchases}, ROAS: ${data.data.roas}`);
+        }
+        
         if (data.success) {
           metricsMap[campaign.id] = data.data;
         } else {
