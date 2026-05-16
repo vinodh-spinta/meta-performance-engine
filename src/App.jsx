@@ -228,7 +228,8 @@ export default function App() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  /* eslint-disable react-hooks/exhaustive-deps */
+  /* eslint-disable react-hooks/exhaustive-deps */
   const fetchAdAccounts = React.useCallback(async (token) => {
     setLoading(true);
     setError('');
@@ -256,6 +257,7 @@ export default function App() {
       setLoading(false);
     }
   }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
