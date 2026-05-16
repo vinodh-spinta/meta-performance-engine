@@ -185,19 +185,28 @@ export default function App() {
 
     const metricsMap = {};
 
-    // Fetch all campaigns in parallel (faster)
-    const promises = campaignsArray.map(async (campaign, index) => {
-      try {
-        const response = await fetch(`${API_URL}/api/campaign-insights`, {
+    // Fetch all campaigns in parallel (faster) with timeout
+    const fetchWithTimeout = (campaign, timeoutMs = 15000) => {
+      return Promise.race([
+        fetch(`${API_URL}/api/campaign-insights`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
-        });
-        const data = await response.json();
+        }).then(r => r.json()),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+        )
+      ]);
+    };
+
+    const promises = campaignsArray.map(async (campaign, index) => {
+      try {
+        const data = await fetchWithTimeout(campaign);
         
         if (data.success) {
           metricsMap[campaign.id] = data.data;
         } else {
+          console.warn(`Failed to fetch metrics for ${campaign.name}: ${data.error}`);
           metricsMap[campaign.id] = {
             spend: 0,
             impressions: 0,
@@ -213,7 +222,7 @@ export default function App() {
         }
         setSuccess(`✅ Loading metrics... ${index + 1}/${campaignsArray.length}`);
       } catch (err) {
-        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
+        console.error(`Timeout or error fetching metrics for campaign ${campaign.id}:`, err);
         metricsMap[campaign.id] = {
           spend: 0,
           impressions: 0,
@@ -257,12 +266,16 @@ export default function App() {
       let completedCount = 0;
 
       campaigns.forEach((campaign) => {
-        fetch(`${API_URL}/api/campaign-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campaignId: campaign.id, accessToken, dateStart: customDateStart, dateEnd: customDateEnd })
-        })
-          .then(r => r.json())
+        Promise.race([
+          fetch(`${API_URL}/api/campaign-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId: campaign.id, accessToken, dateStart: customDateStart, dateEnd: customDateEnd })
+          }).then(r => r.json()),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), 15000)
+          )
+        ])
           .then(data => {
             if (data.success) {
               metricsMap[campaign.id] = data.data;
@@ -272,6 +285,14 @@ export default function App() {
             if (completedCount === campaigns.length) {
               setMetricsLoading(false);
               setSuccess('✅ Custom date metrics loaded!');
+            }
+          })
+          .catch(err => {
+            console.error(`Error for custom date ${campaign.id}:`, err);
+            completedCount++;
+            if (completedCount === campaigns.length) {
+              setMetricsLoading(false);
+              setError('⚠️ Some metrics timed out. Try again or check if lead gen campaigns have CAPI configured.');
             }
           });
       });
