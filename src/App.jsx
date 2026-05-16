@@ -729,8 +729,6 @@ export default function App() {
                 const isLeadGen = isLeadGenCampaign(campaign.objective);
                 const performanceColor = getPerformanceColor(campaign.objective, metrics);
                 const performanceLabel = getPerformanceLabel(campaign.objective, metrics);
-                const mainMetricValue = isLeadGen ? `${formatNumber(metrics.leads)} leads` : `${formatCurrency(metrics.purchaseValue)} rev`;
-                const secondaryMetricValue = isLeadGen ? `${formatCurrency(metrics.cpl)} CPL` : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x ROAS`;
 
                 return (
                   <div key={campaign.id}>
