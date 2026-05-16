@@ -42,9 +42,6 @@ export default function App() {
   const [campaignMetrics, setCampaignMetrics] = useState({});
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [dateRange, setDateRange] = useState('30');
-  const [customDateStart, setCustomDateStart] = useState('');
-  const [customDateEnd, setCustomDateEnd] = useState('');
-  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [sortBy, setSortBy] = useState('performance');
   const [loggingIn, setLoggingIn] = useState(false);
@@ -54,12 +51,6 @@ export default function App() {
   const [adSets, setAdSets] = useState({});
   const [adSetMetrics, setAdSetMetrics] = useState({});
   const [adSetsLoading, setAdSetsLoading] = useState({});
-  
-  // Stage 3C - Creatives
-  const [expandedCreatives, setExpandedCreatives] = useState(null);
-  const [creatives, setCreatives] = useState({});
-  const [creativeMetrics, setCreativeMetrics] = useState({});
-  const [creativesLoading, setCreativesLoading] = useState({});
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
@@ -336,20 +327,10 @@ export default function App() {
     setAdSetMetrics(prev => ({ ...prev, ...metricsMap }));
   };
 
-  // Stage 3C - Fetch Creatives
-  const fetchCreatives = async (adSetId, token) => {
-    setCreativesLoading(prev => ({ ...prev, [adSetId]: true }));
-    try {
-      // Note: We need to get creatives through ads endpoint (Meta doesn't have direct creative endpoint)
-      // For now, we'll fetch ad metrics which includes creative info
-      setCreatives(prev => ({ ...prev, [adSetId]: [] }));
-      // TODO: Add /api/ads endpoint to get creatives for ad set
-    } catch (err) {
-      console.error(`Error fetching creatives for ad set ${adSetId}:`, err);
-    } finally {
-      setCreativesLoading(prev => ({ ...prev, [adSetId]: false }));
-    }
-  };
+  // Stage 3C - Fetch Creatives (Ready for implementation in next phase)
+  // const fetchCreatives = async (adSetId, token) => {
+  //   // TODO: Will implement when building Stage 3C
+  // };
 
   const handleCampaignClick = (campaign) => {
     if (expandedCampaign === campaign.id) {
