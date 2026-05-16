@@ -21,7 +21,7 @@ export default function App() {
   const [customDateStart, setCustomDateStart] = useState('');
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
-  const [showActiveOnly, setShowActiveOnly] = useState(true); // DEFAULT TO TRUE
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [sortBy, setSortBy] = useState('roas');
 
   const getCurrencySymbol = (currency) => {
@@ -34,12 +34,12 @@ export default function App() {
 
   const getPerformanceColor = (roas) => {
     const roasValue = parseFloat(roas) || 0;
-    if (roasValue >= 3) return '#8b5cf6'; // Purple - Exceptional
-    if (roasValue >= 2) return '#10b981'; // Green - Excellent
-    if (roasValue >= 1.5) return '#3b82f6'; // Blue - Good
-    if (roasValue >= 1) return '#f59e0b'; // Amber - Fair
-    if (roasValue > 0) return '#ef4444'; // Red - Poor
-    return '#6b7280'; // Gray - No Data
+    if (roasValue >= 3) return '#8b5cf6';
+    if (roasValue >= 2) return '#10b981';
+    if (roasValue >= 1.5) return '#3b82f6';
+    if (roasValue >= 1) return '#f59e0b';
+    if (roasValue > 0) return '#ef4444';
+    return '#6b7280';
   };
 
   const getPerformanceLabel = (roas) => {
@@ -75,16 +75,16 @@ export default function App() {
     const sorted = [...campaignsToSort];
     switch (sortBy) {
       case 'roas':
-        sorted.sort((a, b) => (campaignMetrics[b.id]?.roas || 0) - (campaignMetrics[a.id]?.roas || 0));
+        sorted.sort((a, b) => (parseFloat(campaignMetrics[b.id]?.roas) || 0) - (parseFloat(campaignMetrics[a.id]?.roas) || 0));
         break;
       case 'purchases':
-        sorted.sort((a, b) => (campaignMetrics[b.id]?.purchases || 0) - (campaignMetrics[a.id]?.purchases || 0));
+        sorted.sort((a, b) => (parseInt(campaignMetrics[b.id]?.purchases) || 0) - (parseInt(campaignMetrics[a.id]?.purchases) || 0));
         break;
       case 'spend':
-        sorted.sort((a, b) => parseFloat(campaignMetrics[b.id]?.spend || 0) - parseFloat(campaignMetrics[a.id]?.spend || 0));
+        sorted.sort((a, b) => (parseFloat(campaignMetrics[b.id]?.spend) || 0) - (parseFloat(campaignMetrics[a.id]?.spend) || 0));
         break;
       case 'impressions':
-        sorted.sort((a, b) => (campaignMetrics[b.id]?.impressions || 0) - (campaignMetrics[a.id]?.impressions || 0));
+        sorted.sort((a, b) => (parseInt(campaignMetrics[b.id]?.impressions) || 0) - (parseInt(campaignMetrics[a.id]?.impressions) || 0));
         break;
       default:
         sorted.sort((a, b) => a.name.localeCompare(b.name));
@@ -118,7 +118,9 @@ export default function App() {
       if (data.success) {
         setCampaigns(data.data || []);
         setCampaignMetrics({});
-        setSuccess(`✅ Loaded ${data.count} campaigns`);
+        setSuccess(`✅ Loaded ${data.count} campaigns. Fetching metrics...`);
+        // Auto-fetch metrics for all campaigns
+        fetchAllCampaignMetrics(data.data || [], token, dateRange);
       } else {
         setError(`Failed: ${data.error}`);
       }
@@ -129,79 +131,99 @@ export default function App() {
     }
   };
 
-  const fetchCampaignMetrics = async (campaignId, token, dateStart, dateEnd) => {
+  const fetchAllCampaignMetrics = async (campaignsArray, token, range) => {
     setMetricsLoading(true);
-    try {
-      console.log('Fetching metrics for campaign:', campaignId, 'from', dateStart, 'to', dateEnd);
-      
-      const response = await fetch(`${API_URL}/api/campaign-insights`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, accessToken: token, dateStart, dateEnd })
-      });
-      const data = await response.json();
-      
-      console.log('Response:', data);
-      
-      if (data.success) {
-        setCampaignMetrics(prev => ({ ...prev, [campaignId]: data.data }));
-      } else {
-        setError(`Failed to load metrics: ${data.error}`);
-      }
-    } catch (err) {
-      setError(`Error loading metrics: ${err.message}`);
-    } finally {
-      setMetricsLoading(false);
+    const getRange = getDateRange(range);
+    let start, end;
+    
+    if (getRange.days) {
+      const endDate = new Date();
+      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
+      start = startDate.toISOString().split('T')[0];
+      end = endDate.toISOString().split('T')[0];
+    } else {
+      start = getRange.start;
+      end = getRange.end;
     }
+
+    const metricsMap = {};
+
+    // Fetch metrics for each campaign
+    for (const campaign of campaignsArray) {
+      try {
+        const response = await fetch(`${API_URL}/api/campaign-insights`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          metricsMap[campaign.id] = data.data;
+        } else {
+          metricsMap[campaign.id] = {
+            spend: 0,
+            impressions: 0,
+            clicks: 0,
+            ctr: 0,
+            cpc: 0,
+            purchases: 0,
+            purchaseValue: 0,
+            roas: 0
+          };
+        }
+      } catch (err) {
+        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
+        metricsMap[campaign.id] = {
+          spend: 0,
+          impressions: 0,
+          clicks: 0,
+          ctr: 0,
+          cpc: 0,
+          purchases: 0,
+          purchaseValue: 0,
+          roas: 0
+        };
+      }
+    }
+
+    setCampaignMetrics(metricsMap);
+    setMetricsLoading(false);
+    setSuccess(`✅ All metrics loaded!`);
   };
 
   const handleCampaignClick = (campaign) => {
-    if (expandedCampaign === campaign.id) {
-      setExpandedCampaign(null);
-    } else {
-      setExpandedCampaign(campaign.id);
-      if (!campaignMetrics[campaign.id]) {
-        const range = getDateRange(dateRange);
-        let start, end;
-        if (range.days) {
-          const endDate = new Date();
-          const startDate = new Date(endDate.getTime() - range.days * 24 * 60 * 60 * 1000);
-          start = startDate.toISOString().split('T')[0];
-          end = endDate.toISOString().split('T')[0];
-        } else {
-          start = range.start;
-          end = range.end;
-        }
-        fetchCampaignMetrics(campaign.id, accessToken, start, end);
-      }
-    }
+    setExpandedCampaign(expandedCampaign === campaign.id ? null : campaign.id);
   };
 
   const handleDatePresetChange = (preset) => {
     setDateRange(preset);
     setShowCustomDatePicker(false);
-    if (expandedCampaign) {
-      const range = getDateRange(preset);
-      let start, end;
-      if (range.days) {
-        const endDate = new Date();
-        const startDate = new Date(endDate.getTime() - range.days * 24 * 60 * 60 * 1000);
-        start = startDate.toISOString().split('T')[0];
-        end = endDate.toISOString().split('T')[0];
-      } else {
-        start = range.start;
-        end = range.end;
-      }
-      fetchCampaignMetrics(expandedCampaign, accessToken, start, end);
+    if (campaigns.length > 0) {
+      fetchAllCampaignMetrics(campaigns, accessToken, preset);
     }
   };
 
   const handleCustomDateApply = () => {
-    if (customDateStart && customDateEnd) {
+    if (customDateStart && customDateEnd && campaigns.length > 0) {
       setDateRange('custom');
-      if (expandedCampaign) {
-        fetchCampaignMetrics(expandedCampaign, accessToken, customDateStart, customDateEnd);
-      }
+      const metricsMap = {};
+
+      campaigns.forEach(campaign => {
+        fetch(`${API_URL}/api/campaign-insights`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ campaignId: campaign.id, accessToken, dateStart: customDateStart, dateEnd: customDateEnd })
+        })
+          .then(r => r.json())
+          .then(data => {
+            if (data.success) {
+              metricsMap[campaign.id] = data.data;
+            }
+            setCampaignMetrics(prev => ({ ...prev, [campaign.id]: metricsMap[campaign.id] }));
+          });
+      });
+
       setShowCustomDatePicker(false);
     }
   };
@@ -222,7 +244,6 @@ export default function App() {
         if (data.data && data.data.length > 0) {
           setSelectedAccount(data.data[0].id);
           setSelectedAccountCurrency(data.data[0].currency || 'USD');
-          console.log('Selected currency:', data.data[0].currency);
           fetchCampaigns(data.data[0].id.replace('act_', ''), token);
         }
       } else {
@@ -256,7 +277,6 @@ export default function App() {
     const account = adAccounts.find(a => a.id === accountId);
     setSelectedAccount(accountId);
     setSelectedAccountCurrency(account?.currency || 'USD');
-    console.log('Account currency:', account?.currency);
     setCampaignMetrics({});
     setExpandedCampaign(null);
     setShowActiveOnly(true);
@@ -295,11 +315,14 @@ export default function App() {
   };
 
   const formatCurrency = (value) => {
-    return `${getCurrencySymbol(selectedAccountCurrency)}${parseFloat(value).toFixed(2)}`;
+    const num = parseFloat(value) || 0;
+    if (isNaN(num)) return `${getCurrencySymbol(selectedAccountCurrency)}0.00`;
+    return `${getCurrencySymbol(selectedAccountCurrency)}${num.toFixed(2)}`;
   };
 
   const formatNumber = (value) => {
-    return parseInt(value || 0).toLocaleString();
+    const num = parseInt(value) || 0;
+    return num.toLocaleString();
   };
 
   const calculateSummary = () => {
@@ -307,10 +330,10 @@ export default function App() {
     filteredCampaigns.forEach(campaign => {
       if (campaignMetrics[campaign.id]) {
         const m = campaignMetrics[campaign.id];
-        totalSpend += parseFloat(m.spend || 0);
-        totalImpressions += parseInt(m.impressions || 0);
-        totalPurchases += parseInt(m.purchases || 0);
-        totalPurchaseValue += parseFloat(m.purchaseValue || 0);
+        totalSpend += parseFloat(m.spend) || 0;
+        totalImpressions += parseInt(m.impressions) || 0;
+        totalPurchases += parseInt(m.purchases) || 0;
+        totalPurchaseValue += parseFloat(m.purchaseValue) || 0;
       }
     });
     const avgROAS = totalSpend > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
@@ -464,7 +487,7 @@ export default function App() {
               { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
               { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
               { label: 'Purchases', value: formatNumber(summary.totalPurchases), color: '#10b981', icon: '🛒' },
-              { label: 'Avg ROAS', value: summary.avgROAS + 'x', color: '#f59e0b', icon: '⭐' }
+              { label: 'Avg ROAS', value: (parseFloat(summary.avgROAS) || 0).toFixed(2) + 'x', color: '#f59e0b', icon: '⭐' }
             ].map((card, i) => (
               <div key={i} style={{
                 background: 'white',
@@ -480,6 +503,22 @@ export default function App() {
                 <p style={{ margin: 0, fontSize: '32px', fontWeight: '700', color: card.color }}>{card.value}</p>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Loading Metrics */}
+        {metricsLoading && (
+          <div style={{
+            background: '#fef3c7',
+            border: '1px solid #fcd34d',
+            color: '#92400e',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            fontSize: '14px',
+            textAlign: 'center'
+          }}>
+            ⏳ Loading metrics for all campaigns...
           </div>
         )}
 
@@ -530,36 +569,34 @@ export default function App() {
               <option value="name">Sort: Name</option>
             </select>
 
-            {expandedCampaign && (
-              <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-                {['today', 'yesterday', 'mtd', 'qtd', '7', '30', '90'].map(preset => (
-                  <button key={preset} onClick={() => handleDatePresetChange(preset)} style={{
-                    padding: '6px 12px',
-                    background: dateRange === preset ? '#667eea' : '#f3f4f6',
-                    border: 'none',
-                    borderRadius: '6px',
-                    color: dateRange === preset ? 'white' : '#1f2937',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    fontWeight: '600'
-                  }}>
-                    {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'mtd' ? 'MTD' : preset === 'qtd' ? 'QTD' : preset + 'D'}
-                  </button>
-                ))}
-                <button onClick={() => setShowCustomDatePicker(!showCustomDatePicker)} style={{
+            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+              {['today', 'yesterday', 'mtd', 'qtd', '7', '30', '90'].map(preset => (
+                <button key={preset} onClick={() => handleDatePresetChange(preset)} style={{
                   padding: '6px 12px',
-                  background: dateRange === 'custom' ? '#667eea' : '#f3f4f6',
+                  background: dateRange === preset ? '#667eea' : '#f3f4f6',
                   border: 'none',
                   borderRadius: '6px',
-                  color: dateRange === 'custom' ? 'white' : '#1f2937',
+                  color: dateRange === preset ? 'white' : '#1f2937',
                   cursor: 'pointer',
                   fontSize: '12px',
                   fontWeight: '600'
                 }}>
-                  📅 Custom
+                  {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'mtd' ? 'MTD' : preset === 'qtd' ? 'QTD' : preset + 'D'}
                 </button>
-              </div>
-            )}
+              ))}
+              <button onClick={() => setShowCustomDatePicker(!showCustomDatePicker)} style={{
+                padding: '6px 12px',
+                background: dateRange === 'custom' ? '#667eea' : '#f3f4f6',
+                border: 'none',
+                borderRadius: '6px',
+                color: dateRange === 'custom' ? 'white' : '#1f2937',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600'
+              }}>
+                📅 Custom
+              </button>
+            </div>
           </div>
         )}
 
@@ -605,8 +642,17 @@ export default function App() {
           {filteredCampaigns.length > 0 ? (
             <div style={{ display: 'grid', gap: '16px' }}>
               {filteredCampaigns.map((campaign) => {
-                const metrics = campaignMetrics[campaign.id];
-                const roas = metrics?.roas || 0;
+                const metrics = campaignMetrics[campaign.id] || {
+                  spend: 0,
+                  impressions: 0,
+                  clicks: 0,
+                  ctr: 0,
+                  cpc: 0,
+                  purchases: 0,
+                  purchaseValue: 0,
+                  roas: 0
+                };
+                const roas = parseFloat(metrics?.roas) || 0;
                 const performanceColor = getPerformanceColor(roas);
                 const performanceLabel = getPerformanceLabel(roas);
 
@@ -647,29 +693,27 @@ export default function App() {
                           </span>
                         </div>
 
-                        {metrics && (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginBottom: '8px' }}>
-                            <div>
-                              <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Spend</p>
-                              <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>
-                            </div>
-                            <div>
-                              <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Impressions</p>
-                              <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>
-                            </div>
-                            <div>
-                              <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Purchases</p>
-                              <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{formatNumber(metrics.purchases)}</p>
-                            </div>
-                            <div>
-                              <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>ROAS</p>
-                              <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{roas}x</p>
-                            </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginBottom: '8px' }}>
+                          <div>
+                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Spend</p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>
                           </div>
-                        )}
+                          <div>
+                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Impressions</p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>
+                          </div>
+                          <div>
+                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Purchases</p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{formatNumber(metrics.purchases)}</p>
+                          </div>
+                          <div>
+                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>ROAS</p>
+                            <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{(parseFloat(metrics.roas) || 0).toFixed(2)}x</p>
+                          </div>
+                        </div>
 
                         <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#9ca3af' }}>
-                          {campaign.objective} • {metrics ? performanceLabel : 'Click to load metrics'}
+                          {campaign.objective} • {performanceLabel}
                         </p>
                       </div>
 
@@ -693,34 +737,28 @@ export default function App() {
                         borderBottom: '2px solid #667eea',
                         marginTop: '-1px'
                       }}>
-                        {metricsLoading ? (
-                          <p style={{ color: '#9ca3af', textAlign: 'center', margin: 0 }}>Loading detailed metrics...</p>
-                        ) : metrics ? (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                            {[
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (metrics.ctr || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
-                              { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
-                              { label: 'ROAS', value: metrics.roas + 'x', color: performanceColor, highlight: true }
-                            ].map((item, i) => (
-                              <div key={i} style={{
-                                background: '#f9fafb',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p style={{ color: '#9ca3af', textAlign: 'center', margin: 0 }}>No metrics available</p>
-                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+                          {[
+                            { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
+                            { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
+                            { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
+                            { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
+                            { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
+                            { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
+                            { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
+                            { label: 'ROAS', value: (parseFloat(metrics.roas) || 0).toFixed(2) + 'x', color: performanceColor, highlight: true }
+                          ].map((item, i) => (
+                            <div key={i} style={{
+                              background: '#f9fafb',
+                              padding: '16px',
+                              borderRadius: '8px',
+                              border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
+                            }}>
+                              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
+                              <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
