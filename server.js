@@ -555,9 +555,51 @@ app.post('/api/ads', async (req, res) => {
 
               console.log(`   Creative details:`, JSON.stringify(creativeDetailsResponse.data, null, 2));
 
+              // Extract image/video URL from creative
+              let imageUrl = null;
+              let videoUrl = null;
+              let creativeType = 'UNKNOWN';
+
+              const creative = creativeDetailsResponse.data;
+
+              // Try to get video URL first
+              if (creative.video_data?.video_url) {
+                videoUrl = creative.video_data.video_url;
+                creativeType = 'VIDEO';
+                console.log(`   ✅ Found video_url: ${videoUrl}`);
+              }
+
+              // Try to get video thumbnail
+              if (creative.video_data?.image) {
+                imageUrl = creative.video_data.image;
+                console.log(`   ✅ Found video thumbnail: ${imageUrl}`);
+              }
+
+              // Try to get image from object_story_spec
+              if (creative.object_story_spec?.link_data?.image_url) {
+                imageUrl = creative.object_story_spec.link_data.image_url;
+                creativeType = 'STATIC';
+                console.log(`   ✅ Found image_url from object_story_spec: ${imageUrl}`);
+              }
+
+              // Fallback: try to construct URL from image hash if needed
+              if (!imageUrl && creative.object_story_spec?.link_data?.image_hash) {
+                console.log(`   📌 Found image_hash but no direct URL: ${creative.object_story_spec.link_data.image_hash}`);
+                // Note: image_hash can't be directly used as a URL
+              }
+
               return {
                 ...ad,
-                creativeData: creativeDetailsResponse.data
+                creativeData: {
+                  id: creative.id,
+                  name: creative.name,
+                  type: creativeType,
+                  imageUrl: imageUrl,
+                  videoUrl: videoUrl,
+                  displayUrl: imageUrl || videoUrl,
+                  objectStorySpec: creative.object_story_spec,
+                  videoData: creative.video_data
+                }
               };
             } catch (creativeErr) {
               console.log(`   ⚠️ Could not get creative details:`, creativeErr.message);
