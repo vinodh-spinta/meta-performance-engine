@@ -18,19 +18,20 @@ const REDIRECT_URI = process.env.REDIRECT_URI || 'https://meta-performance-engin
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://meta-performance-engine-ads.vercel.app';
 const API_VERSION = process.env.META_API_VERSION || 'v18.0';
 
-console.log('=== META PERFORMANCE ENGINE - ENHANCED BACKEND ===');
-console.log('✅ App ID:', META_APP_ID);
-console.log('✅ API Version:', API_VERSION);
-console.log('✅ Redirect URI:', REDIRECT_URI);
-console.log('✅ Frontend URL:', FRONTEND_URL);
-console.log('✅ Ready for production\n');
+console.log('\n🚀 META PERFORMANCE ENGINE - PRODUCTION BACKEND');
+console.log('='.repeat(50));
+console.log(`✅ App ID: ${META_APP_ID}`);
+console.log(`✅ API Version: ${API_VERSION}`);
+console.log(`✅ Redirect URI: ${REDIRECT_URI}`);
+console.log(`✅ Frontend URL: ${FRONTEND_URL}`);
+console.log('='.repeat(50) + '\n');
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date(),
-    message: 'Backend is running',
+    message: 'Backend is running with enhanced logging',
     version: API_VERSION
   });
 });
@@ -59,7 +60,7 @@ app.get('/api/auth/callback', async (req, res) => {
       return res.redirect(`${FRONTEND_URL}?error=No+authorization+code`);
     }
 
-    console.log('🔐 OAuth callback received, exchanging code for token...');
+    console.log('🔐 OAuth callback - exchanging code for token...');
 
     const tokenResponse = await axios.post(
       `https://graph.facebook.com/${API_VERSION}/oauth/access_token`,
@@ -72,7 +73,7 @@ app.get('/api/auth/callback', async (req, res) => {
     );
 
     const accessToken = tokenResponse.data.access_token;
-    console.log('✅ Access token obtained from Meta');
+    console.log('✅ Access token obtained\n');
 
     res.redirect(`${FRONTEND_URL}?token=${accessToken}`);
   } catch (error) {
@@ -93,7 +94,7 @@ app.post('/api/ad-accounts', async (req, res) => {
       });
     }
 
-    console.log('📊 Fetching ad accounts for user...');
+    console.log('📊 Fetching ad accounts...');
 
     const accountsResponse = await axios.get(
       `https://graph.facebook.com/${API_VERSION}/me/adaccounts`,
@@ -112,7 +113,8 @@ app.post('/api/ad-accounts', async (req, res) => {
       status: account.account_status
     }));
 
-    console.log(`✅ Fetched ${accounts.length} ad accounts\n`);
+    console.log(`✅ Fetched ${accounts.length} ad accounts`);
+    console.log(`📍 Currencies: ${accounts.map(a => `${a.name}=${a.currency}`).join(', ')}\n`);
 
     res.json({
       success: true,
@@ -215,7 +217,7 @@ app.post('/api/ad-sets', async (req, res) => {
   }
 });
 
-// Step 6: Fetch campaign insights (IMPROVED - Multiple methods for purchase data)
+// Step 6: ENHANCED campaign insights with detailed logging and time-series data
 app.post('/api/campaign-insights', async (req, res) => {
   try {
     const { campaignId, accessToken, dateStart, dateEnd } = req.body;
@@ -227,7 +229,8 @@ app.post('/api/campaign-insights', async (req, res) => {
       });
     }
 
-    console.log(`📊 Fetching insights for campaign: ${campaignId}`);
+    console.log(`\n📊 FETCHING INSIGHTS: Campaign ${campaignId}`);
+    console.log(`📅 Date Range: ${dateStart} to ${dateEnd}`);
 
     // Default dates
     let start = dateStart;
@@ -240,12 +243,12 @@ app.post('/api/campaign-insights', async (req, res) => {
       end = endDate.toISOString().split('T')[0];
     }
 
-    // REQUEST 1: Main insights with all conversion data
+    // REQUEST: Get aggregated insights
     const insightsResponse = await axios.get(
       `https://graph.facebook.com/${API_VERSION}/${campaignId}/insights`,
       {
         params: {
-          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,conversions,conversion_values',
+          fields: 'spend,impressions,clicks,ctr,cpc,actions,action_values,purchase_roas,conversions,conversion_values,date_start,date_stop',
           time_range: JSON.stringify({
             since: start,
             until: end
@@ -259,68 +262,110 @@ app.post('/api/campaign-insights', async (req, res) => {
       ? insightsResponse.data.data[0]
       : {};
 
-    console.log('📋 Raw insights from Meta:', JSON.stringify(insights, null, 2));
+    console.log('📋 RAW RESPONSE FROM META:');
+    console.log(JSON.stringify(insights, null, 2));
 
-    // Parse purchase data - Try multiple methods
+    // Parse purchase data - Multiple methods
     let purchases = 0;
     let purchaseValue = 0;
+    let leads = 0;
     let rawROAS = 0;
 
-    // METHOD 1: Try purchase_roas field directly
+    // METHOD 1: purchase_roas field
     if (insights.purchase_roas) {
       rawROAS = parseFloat(insights.purchase_roas);
-      console.log('✅ Found purchase_roas:', rawROAS);
+      console.log(`✅ METHOD 1 - Found purchase_roas: ${rawROAS}`);
     }
 
-    // METHOD 2: Try actions array (purchases)
+    // METHOD 2: actions array (purchases or leads)
     if (insights.actions && Array.isArray(insights.actions)) {
+      console.log(`📋 Actions array found with ${insights.actions.length} items:`);
+      insights.actions.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
       const purchaseAction = insights.actions.find(a => a.action_type === 'purchase');
       if (purchaseAction) {
         purchases = parseInt(purchaseAction.value || 0);
-        console.log('✅ Found purchase action:', purchases);
+        console.log(`✅ METHOD 2 - Found purchase action: ${purchases}`);
+      }
+
+      const leadsAction = insights.actions.find(a => a.action_type === 'lead');
+      if (leadsAction) {
+        leads = parseInt(leadsAction.value || 0);
+        console.log(`✅ METHOD 2 - Found leads action: ${leads}`);
       }
     }
 
-    // METHOD 3: Try action_values array (purchase values)
+    // METHOD 3: action_values array (purchase values)
     if (insights.action_values && Array.isArray(insights.action_values)) {
+      console.log(`📋 Action_values array found with ${insights.action_values.length} items:`);
+      insights.action_values.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
       const purchaseValue_obj = insights.action_values.find(a => a.action_type === 'purchase');
       if (purchaseValue_obj) {
         purchaseValue = parseFloat(purchaseValue_obj.value || 0);
-        console.log('✅ Found purchase value:', purchaseValue);
+        console.log(`✅ METHOD 3 - Found purchase value: ${purchaseValue}`);
       }
     }
 
-    // METHOD 4: Try conversion_values if purchase_value not found
+    // METHOD 4: conversion_values array
     if (purchaseValue === 0 && insights.conversion_values && Array.isArray(insights.conversion_values)) {
+      console.log(`📋 Conversion_values array found with ${insights.conversion_values.length} items:`);
+      insights.conversion_values.forEach(a => console.log(`   - ${a.action_type}: ${a.value}`));
+      
       const conversionValue = insights.conversion_values.find(c => c.action_type === 'omni_purchase' || c.action_type === 'purchase');
       if (conversionValue) {
         purchaseValue = parseFloat(conversionValue.value || 0);
-        console.log('✅ Found conversion value:', purchaseValue);
+        console.log(`✅ METHOD 4 - Found conversion value: ${purchaseValue}`);
       }
     }
 
-    // METHOD 5: Try conversions array if purchases not found
+    // METHOD 5: conversions array
     if (purchases === 0 && insights.conversions && Array.isArray(insights.conversions)) {
+      console.log(`📋 Conversions array found with ${insights.conversions.length} items:`);
+      insights.conversions.forEach(c => console.log(`   - ${c.action_type}: ${c.value}`));
+      
       const conversion = insights.conversions.find(c => c.action_type === 'purchase');
       if (conversion) {
         purchases = parseInt(conversion.value || 0);
-        console.log('✅ Found conversion count:', purchases);
+        console.log(`✅ METHOD 5 - Found conversion count: ${purchases}`);
+      }
+
+      const leadsConversion = insights.conversions.find(c => c.action_type === 'lead');
+      if (leadsConversion) {
+        leads = parseInt(leadsConversion.value || 0);
+        console.log(`✅ METHOD 5 - Found leads conversion: ${leads}`);
       }
     }
 
-    // Calculate ROAS
+    // Calculate ROAS and CPL
     const spend = parseFloat(insights.spend || 0);
     let roas = 0;
+    let cpl = 0;
     
     if (rawROAS > 0) {
       roas = rawROAS.toFixed(2);
+      console.log(`💰 ROAS from Meta: ${roas}`);
     } else if (spend > 0 && purchaseValue > 0) {
       roas = (purchaseValue / spend).toFixed(2);
-    } else if (spend > 0) {
-      roas = 0;
+      console.log(`💰 ROAS calculated: ${roas}`);
     }
 
-    console.log(`✅ Final metrics - Spend: ${spend}, Purchases: ${purchases}, PurchaseValue: ${purchaseValue}, ROAS: ${roas}\n`);
+    if (leads > 0 && spend > 0) {
+      cpl = (spend / leads).toFixed(2);
+      console.log(`💰 CPL calculated: ${cpl}`);
+    }
+
+    console.log(`\n✅ FINAL METRICS:`);
+    console.log(`   Spend: ${spend}`);
+    console.log(`   Impressions: ${parseInt(insights.impressions || 0)}`);
+    console.log(`   Clicks: ${parseInt(insights.clicks || 0)}`);
+    console.log(`   CTR: ${parseFloat(insights.ctr || 0).toFixed(2)}`);
+    console.log(`   CPC: ${parseFloat(insights.cpc || 0).toFixed(2)}`);
+    console.log(`   Purchases: ${purchases}`);
+    console.log(`   Purchase Value: ${purchaseValue}`);
+    console.log(`   Leads: ${leads}`);
+    console.log(`   CPL: ${cpl}`);
+    console.log(`   ROAS: ${roas}\n`);
 
     res.json({
       success: true,
@@ -334,6 +379,8 @@ app.post('/api/campaign-insights', async (req, res) => {
         purchases: purchases,
         purchaseValue: purchaseValue,
         roas: roas,
+        leads: leads,
+        cpl: cpl,
         dateRange: { start, end },
         rawData: {
           actions: insights.actions || [],
@@ -345,6 +392,7 @@ app.post('/api/campaign-insights', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching campaign insights:', error.response?.data?.error?.message || error.message);
+    console.error('Full error:', error.response?.data);
     
     res.status(500).json({
       success: false,
@@ -396,7 +444,6 @@ app.post('/api/adset-insights', async (req, res) => {
       ? insightsResponse.data.data[0]
       : {};
 
-    // Parse purchase data
     let purchases = 0;
     let purchaseValue = 0;
 
@@ -486,7 +533,6 @@ app.post('/api/creative-insights', async (req, res) => {
       ? insightsResponse.data.data[0]
       : {};
 
-    // Parse purchase data
     let purchases = 0;
     let purchaseValue = 0;
 
@@ -543,14 +589,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running on port ${PORT}`);
+  console.log(`🚀 Server listening on port ${PORT}`);
   console.log(`📍 GET /api/health - Health check`);
-  console.log(`📍 GET /api/auth/login-url - Generate OAuth login URL`);
+  console.log(`📍 GET /api/auth/login-url - OAuth login`);
   console.log(`📍 GET /api/auth/callback - OAuth callback`);
-  console.log(`📍 POST /api/ad-accounts - Fetch ad accounts`);
-  console.log(`📍 POST /api/campaigns - Fetch campaigns`);
-  console.log(`📍 POST /api/ad-sets - Fetch ad sets`);
-  console.log(`📍 POST /api/campaign-insights - Fetch campaign metrics`);
-  console.log(`📍 POST /api/adset-insights - Fetch ad set metrics (Stage 3B)`);
-  console.log(`📍 POST /api/creative-insights - Fetch creative metrics (Stage 3C)\n`);
+  console.log(`📍 POST /api/ad-accounts - Get ad accounts`);
+  console.log(`📍 POST /api/campaigns - Get campaigns`);
+  console.log(`📍 POST /api/ad-sets - Get ad sets`);
+  console.log(`📍 POST /api/campaign-insights - Get campaign metrics (with detailed logging)`);
+  console.log(`📍 POST /api/adset-insights - Get ad set metrics`);
+  console.log(`📍 POST /api/creative-insights - Get creative metrics\n`);
 });
