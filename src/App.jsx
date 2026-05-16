@@ -30,8 +30,8 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
 // Creative Preview Component - Shows actual creative image/video with type badge
 const CreativePreview = ({ creative }) => {
   const creativeData = creative.creativeData || {};
-  const imageUrl = creativeData.imageUrl || creativeData.image_url;
-  const videoUrl = creativeData.videoUrl || creativeData.video_url;
+  const imageUrl = creativeData.imageUrl;
+  const videoUrl = creativeData.videoUrl;
   const creativeType = creativeData.type || 'UNKNOWN';
   
   const typeIcons = {
@@ -47,14 +47,19 @@ const CreativePreview = ({ creative }) => {
   const icon = typeIcons[creativeType] || typeIcons['UNKNOWN'];
   const displayUrl = imageUrl || videoUrl;
 
+  console.log(`🎨 CreativePreview for ${creative.name}:`, { imageUrl, videoUrl, displayUrl, creativeType });
+
   return (
     <div style={{
       width: '100px',
       height: '100px',
+      backgroundImage: displayUrl ? `url("${displayUrl}")` : 'none',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundColor: displayUrl ? 'transparent' : '#f3f4f6',
       background: displayUrl 
-        ? `url("${displayUrl}") center/cover no-repeat` 
+        ? `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.1)), url("${displayUrl}") center/cover no-repeat`
         : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      backgroundColor: displayUrl ? 'transparent' : undefined,
       borderRadius: '8px',
       display: 'flex',
       alignItems: 'center',
@@ -68,7 +73,7 @@ const CreativePreview = ({ creative }) => {
       {!displayUrl && (
         <span style={{ fontSize: '36px' }}>{icon}</span>
       )}
-      {videoUrl && displayUrl === videoUrl && (
+      {videoUrl && (
         <div style={{
           position: 'absolute',
           top: 0,
@@ -101,7 +106,7 @@ const CreativePreview = ({ creative }) => {
         color: '#667eea',
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
       }}>
-        {creativeType === 'VIDEO' || videoUrl ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
+        {creativeType === 'VIDEO' ? '🎥' : creativeType === 'CAROUSEL' ? '✕' : '◻'}
       </span>
     </div>
   );
