@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 
-// API URL - hardcoded for frontend (no dotenv needed)
 const API_URL = 'https://meta-performance-engine-production.up.railway.app';
 
 export default function App() {
@@ -147,20 +146,40 @@ export default function App() {
     }
 
     const metricsMap = {};
+    let completedCount = 0;
 
-    // Fetch metrics for each campaign
-    for (const campaign of campaignsArray) {
-      try {
-        const response = await fetch(`${API_URL}/api/campaign-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
-        });
-        const data = await response.json();
-        
-        if (data.success) {
-          metricsMap[campaign.id] = data.data;
-        } else {
+    // Fetch in parallel for speed (max 5 at a time)
+    const chunkSize = 5;
+    for (let i = 0; i < campaignsArray.length; i += chunkSize) {
+      const chunk = campaignsArray.slice(i, i + chunkSize);
+      
+      await Promise.all(chunk.map(async (campaign) => {
+        try {
+          const response = await fetch(`${API_URL}/api/campaign-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
+          });
+          const data = await response.json();
+          
+          if (data.success) {
+            metricsMap[campaign.id] = data.data;
+          } else {
+            metricsMap[campaign.id] = {
+              spend: 0,
+              impressions: 0,
+              clicks: 0,
+              ctr: 0,
+              cpc: 0,
+              purchases: 0,
+              purchaseValue: 0,
+              roas: 0
+            };
+          }
+          completedCount++;
+          setSuccess(`✅ Loading metrics... ${completedCount}/${campaignsArray.length}`);
+        } catch (err) {
+          console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
           metricsMap[campaign.id] = {
             spend: 0,
             impressions: 0,
@@ -171,20 +190,9 @@ export default function App() {
             purchaseValue: 0,
             roas: 0
           };
+          completedCount++;
         }
-      } catch (err) {
-        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
-        metricsMap[campaign.id] = {
-          spend: 0,
-          impressions: 0,
-          clicks: 0,
-          ctr: 0,
-          cpc: 0,
-          purchases: 0,
-          purchaseValue: 0,
-          roas: 0
-        };
-      }
+      }));
     }
 
     setCampaignMetrics(metricsMap);
@@ -207,7 +215,10 @@ export default function App() {
   const handleCustomDateApply = () => {
     if (customDateStart && customDateEnd && campaigns.length > 0) {
       setDateRange('custom');
+      setMetricsLoading(true);
+      
       const metricsMap = {};
+      let completedCount = 0;
 
       campaigns.forEach(campaign => {
         fetch(`${API_URL}/api/campaign-insights`, {
@@ -220,7 +231,12 @@ export default function App() {
             if (data.success) {
               metricsMap[campaign.id] = data.data;
             }
+            completedCount++;
             setCampaignMetrics(prev => ({ ...prev, [campaign.id]: metricsMap[campaign.id] }));
+            if (completedCount === campaigns.length) {
+              setMetricsLoading(false);
+              setSuccess('✅ Custom date metrics loaded!');
+            }
           });
       });
 
@@ -228,7 +244,6 @@ export default function App() {
     }
   };
 
-  /* eslint-disable react-hooks/exhaustive-deps */
   /* eslint-disable react-hooks/exhaustive-deps */
   const fetchAdAccounts = React.useCallback(async (token) => {
     setLoading(true);
@@ -244,9 +259,11 @@ export default function App() {
         setAdAccounts(data.data || []);
         setSuccess(`✅ Found ${data.count} ad accounts`);
         if (data.data && data.data.length > 0) {
-          setSelectedAccount(data.data[0].id);
-          setSelectedAccountCurrency(data.data[0].currency || 'USD');
-          fetchCampaigns(data.data[0].id.replace('act_', ''), token);
+          const firstAccount = data.data[0];
+          setSelectedAccount(firstAccount.id);
+          setSelectedAccountCurrency(firstAccount.currency || 'USD');
+          console.log(`Selected currency: ${firstAccount.currency}`);
+          fetchCampaigns(firstAccount.id.replace('act_', ''), token);
         }
       } else {
         setError(`Failed: ${data.error}`);
@@ -280,6 +297,7 @@ export default function App() {
     const account = adAccounts.find(a => a.id === accountId);
     setSelectedAccount(accountId);
     setSelectedAccountCurrency(account?.currency || 'USD');
+    console.log(`Account currency: ${account?.currency}`);
     setCampaignMetrics({});
     setExpandedCampaign(null);
     setShowActiveOnly(true);
@@ -452,30 +470,44 @@ export default function App() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
         }}>
           <label style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
-            📍 Select Ad Account ({selectedAccountCurrency})
+            📍 Select Ad Account
           </label>
-          <select
-            value={selectedAccount}
-            onChange={handleAccountChange}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <select
+              value={selectedAccount}
+              onChange={handleAccountChange}
+              style={{
+                flex: 1,
+                padding: '12px',
+                background: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                color: '#1f2937',
+                fontSize: '14px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              <option value="">Choose an ad account...</option>
+              {adAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.currency || 'USD'})
+                </option>
+              ))}
+            </select>
+            <div style={{
+              background: '#667eea',
+              color: 'white',
+              padding: '10px 16px',
               borderRadius: '8px',
-              color: '#1f2937',
+              fontWeight: '700',
               fontSize: '14px',
-              cursor: 'pointer',
-              fontWeight: '500'
-            }}
-          >
-            <option value="">Choose an ad account...</option>
-            {adAccounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name} ({account.currency || 'USD'})
-              </option>
-            ))}
-          </select>
+              minWidth: '80px',
+              textAlign: 'center'
+            }}>
+              {getCurrencySymbol(selectedAccountCurrency)}
+            </div>
+          </div>
         </div>
 
         {/* Summary Cards */}
@@ -521,7 +553,7 @@ export default function App() {
             fontSize: '14px',
             textAlign: 'center'
           }}>
-            ⏳ Loading metrics for all campaigns...
+            ⏳ Optimizing metrics... (parallel fetching in progress)
           </div>
         )}
 
@@ -781,7 +813,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          🔐 Securely connected | Real-time data | Currency: {selectedAccountCurrency}
+          🔐 Securely connected | Real-time data | Currency: {selectedAccountCurrency} | Optimized parallel fetching
         </p>
       </div>
     </div>
