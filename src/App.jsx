@@ -414,19 +414,30 @@ export default function App() {
   // Stage 3C - Fetch Creatives (Ads under Ad Set)
   const fetchCreatives = async (adSetId, token) => {
     setCreativesLoading(prev => ({ ...prev, [adSetId]: true }));
+    console.log(`🎬 FETCHING CREATIVES for adSetId: ${adSetId}`);
     try {
+      const requestBody = { adSetId, accessToken: token };
+      console.log('📤 Sending request:', requestBody);
+      
       const response = await fetch(`${API_URL}/api/ads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adSetId, accessToken: token })
+        body: JSON.stringify(requestBody)
       });
+      
+      console.log('📥 Response status:', response.status);
       const data = await response.json();
+      console.log('📥 Response data:', data);
+      
       if (data.success) {
+        console.log(`✅ Got ${data.count} creatives`);
         setAdCreatives(prev => ({ ...prev, [adSetId]: data.data || [] }));
         fetchAllCreativeMetrics(adSetId, data.data || [], token);
+      } else {
+        console.error('❌ API error:', data.error);
       }
     } catch (err) {
-      console.error(`Error fetching creatives for ad set ${adSetId}:`, err);
+      console.error(`❌ Error fetching creatives for ad set ${adSetId}:`, err);
     } finally {
       setCreativesLoading(prev => ({ ...prev, [adSetId]: false }));
     }
