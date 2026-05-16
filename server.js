@@ -509,7 +509,7 @@ app.post('/api/ads', async (req, res) => {
       `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
       {
         params: {
-          fields: 'id,name,status,created_time,adset_id,creative',
+          fields: 'id,name,status,created_time,adset_id,creative{id,name,type,object_story_spec,video_data}',
           access_token: accessToken
         }
       }
@@ -517,42 +517,64 @@ app.post('/api/ads', async (req, res) => {
 
     let ads = adsResponse.data.data || [];
 
-    // Fetch detailed creative data for each ad
-    const adsWithCreatives = await Promise.all(
-      ads.map(async (ad) => {
-        try {
-          if (ad.creative && ad.creative.id) {
-            const creativeResponse = await axios.get(
-              `https://graph.facebook.com/${API_VERSION}/${ad.creative.id}`,
-              {
-                params: {
-                  fields: 'id,name,type,image_url,video_data,title,body,object_story_spec,status',
-                  access_token: accessToken
-                }
-              }
-            );
-            return {
-              ...ad,
-              creativeData: creativeResponse.data
-            };
-          }
-          return ad;
-        } catch (err) {
-          console.log(`⚠️ Could not fetch creative details for ad ${ad.id}`);
-          return ad;
-        }
-      })
-    );
+    // Extract image/video URLs from creative objects
+    const adsWithCreativeUrls = ads.map((ad) => {
+      let imageUrl = null;
+      let videoUrl = null;
+      let creativeType = 'UNKNOWN';
 
-    console.log(`✅ Fetched ${adsWithCreatives.length} ads/creatives with details\n`);
+      if (ad.creative) {
+        creativeType = ad.creative.type || 'UNKNOWN';
+        
+        // Parse object_story_spec to extract media URL
+        if (ad.creative.object_story_spec) {
+          const spec = ad.creative.object_story_spec;
+          
+          // For feed posts (most common)
+          if (spec.link_data?.image_hash) {
+            imageUrl = `https://www.facebook.com/ads/library/?ad_type=all&country=US&q=${spec.link_data.image_hash}`;
+          }
+          if (spec.link_data?.image_url) {
+            imageUrl = spec.link_data.image_url;
+          }
+          if (spec.link_data?.message) {
+            // Store the ad copy as fallback
+            ad.creativeText = spec.link_data.message;
+          }
+        }
+
+        // For video creatives
+        if (ad.creative.video_data?.video_url) {
+          videoUrl = ad.creative.video_data.video_url;
+          creativeType = 'VIDEO';
+        }
+        if (ad.creative.video_data?.image) {
+          imageUrl = ad.creative.video_data.image;
+        }
+      }
+
+      return {
+        ...ad,
+        creativeData: {
+          ...ad.creative,
+          imageUrl: imageUrl,
+          videoUrl: videoUrl,
+          type: creativeType,
+          displayUrl: imageUrl || videoUrl
+        }
+      };
+    });
+
+    console.log(`✅ Fetched ${adsWithCreativeUrls.length} ads/creatives with media URLs\n`);
 
     res.json({
       success: true,
-      data: adsWithCreatives,
-      count: adsWithCreatives.length
+      data: adsWithCreativeUrls,
+      count: adsWithCreativeUrls.length
     });
   } catch (error) {
     console.error('❌ Error fetching ads:', error.response?.data?.error?.message || error.message);
+    console.error('Full error:', error.message);
     res.status(500).json({
       success: false,
       error: error.response?.data?.error?.message || error.message
