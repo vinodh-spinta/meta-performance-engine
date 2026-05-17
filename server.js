@@ -192,20 +192,58 @@ app.post('/api/ad-sets', async (req, res) => {
       `https://graph.facebook.com/${API_VERSION}/${campaignId}/adsets`,
       {
         params: {
-          fields: 'id,name,status,daily_budget,lifetime_budget,created_time',
+          fields: 'id,name,status,daily_budget,lifetime_budget,created_time,ads{id,name,status,created_time,creative{id,name,object_story_spec}}',
           access_token: accessToken
         }
       }
     );
 
-    const adSets = adSetsResponse.data.data || [];
+    let adSets = adSetsResponse.data.data || [];
+    console.log(`✅ Found ${adSets.length} ad sets`);
 
-    console.log(`✅ Fetched ${adSets.length} ad sets\n`);
+    // Process ad sets and extract creatives
+    const adSetsWithCreatives = adSets.map((adSet) => {
+      const creatives = (adSet.ads?.data || []).map((ad) => {
+        let adCopy = 'No copy';
+        let headline = '';
+        let creativeType = 'STATIC';
+
+        if (ad.creative?.object_story_spec?.link_data) {
+          const linkData = ad.creative.object_story_spec.link_data;
+          if (linkData.message) adCopy = linkData.message;
+          if (linkData.headline) headline = linkData.headline;
+        }
+
+        return {
+          id: ad.id,
+          name: ad.name,
+          status: ad.status,
+          created_time: ad.created_time,
+          creativeId: ad.creative?.id,
+          creativeName: ad.creative?.name || 'Creative',
+          adCopy: adCopy,
+          headline: headline,
+          creativeType: creativeType
+        };
+      });
+
+      return {
+        id: adSet.id,
+        name: adSet.name,
+        status: adSet.status,
+        daily_budget: adSet.daily_budget,
+        lifetime_budget: adSet.lifetime_budget,
+        created_time: adSet.created_time,
+        creatives: creatives
+      };
+    });
+
+    console.log(`✅ Processed ${adSetsWithCreatives.length} ad sets with ${adSetsWithCreatives.reduce((sum, as) => sum + as.creatives.length, 0)} total creatives\n`);
 
     res.json({
       success: true,
-      data: adSets,
-      count: adSets.length
+      data: adSetsWithCreatives,
+      count: adSetsWithCreatives.length
     });
   } catch (error) {
     console.error('❌ Error fetching ad sets:', error.response?.data?.error?.message || error.message);
@@ -491,7 +529,9 @@ app.post('/api/adset-insights', async (req, res) => {
   }
 });
 
-// Step 7B: Fetch ads/creatives under ad set (Stage 3C) - SIMPLIFIED
+// DISABLED - Creatives now pulled with ad sets endpoint
+// Step 7B: Fetch ads/creatives under ad set (Stage 3C) - MOVED TO /api/ad-sets
+/*
 app.post('/api/ads', async (req, res) => {
   try {
     const { adSetId, accessToken } = req.body;
@@ -510,7 +550,7 @@ app.post('/api/ads', async (req, res) => {
       `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
       {
         params: {
-          fields: 'id,name,status,created_time,adset_id,creative{id,name,object_story_spec,video_data}',
+          fields: 'id,name,status,created_time,adset_id,creative{id,name,object_story_spec}',
           access_token: accessToken
         }
       }
@@ -537,13 +577,8 @@ app.post('/api/ads', async (req, res) => {
         console.log(`   Creative: ${creativeName}`);
 
         // Check if it's a video
-        if (ad.creative.video_data) {
-          creativeType = 'VIDEO';
-          console.log(`   Type: VIDEO`);
-        } else if (ad.creative.object_story_spec) {
-          creativeType = 'STATIC';
-          console.log(`   Type: STATIC`);
-        }
+        // Note: video_data not available in inline request, would need separate fetch
+        // For now, detect based on object_story_spec structure
 
         // Extract text from object_story_spec
         if (ad.creative.object_story_spec?.link_data) {
@@ -600,6 +635,7 @@ app.post('/api/ads', async (req, res) => {
     });
   }
 });
+*/
 
 // Step 8: Fetch creative insights (Stage 3C)
 app.post('/api/creative-insights', async (req, res) => {
