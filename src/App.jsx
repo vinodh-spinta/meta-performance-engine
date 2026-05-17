@@ -14,7 +14,7 @@ const SkeletonLoader = ({ width = '100%', height = '24px', style = {} }) => (
     ...style
   }} />
 );
- 
+
 // Loading Spinner Component
 const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
   <div style={{
