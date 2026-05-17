@@ -567,7 +567,7 @@ export default function App() {
     if (loggedIn && accessToken) {
       fetchAdAccounts();
     }
-  }, [loggedIn, accessToken]);
+  }, [loggedIn, accessToken, fetchAdAccounts]);
 
   const fetchCampaigns = async (accountId) => {
     try {
@@ -715,7 +715,7 @@ export default function App() {
       const campaignIds = campaigns.map(c => c.id);
       fetchCampaignMetrics(campaignIds);
     }
-  }, [dateRange, selectedAccount]);
+  }, [dateRange, selectedAccount, campaigns, fetchCampaignMetrics]);
 
   const handleDateRangeChange = (newRange) => {
     setDateRange(newRange);
