@@ -183,10 +183,9 @@ export default function App() {
   const [adSetMetrics, setAdSetMetrics] = useState({});
   const [adSetsLoading, setAdSetsLoading] = useState({});
   
-  // Stage 3C - Creatives
-  const [adCreatives, setAdCreatives] = useState({});
+  // Stage 3C - Creatives (pulled with ad sets, metrics only)
+  const [expandedCreatives, setExpandedCreatives] = useState(null);
   const [creativeMetrics, setCreativeMetrics] = useState({});
-  const [creativesLoading, setCreativesLoading] = useState({});
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
@@ -462,37 +461,8 @@ export default function App() {
     setAdSetMetrics(prev => ({ ...prev, ...metricsMap }));
   };
 
-  // Stage 3C - Fetch Creatives (Ads under Ad Set)
-  const fetchCreatives = async (adSetId, token) => {
-    setCreativesLoading(prev => ({ ...prev, [adSetId]: true }));
-    console.log(`🎬 FETCHING CREATIVES for adSetId: ${adSetId}`);
-    try {
-      const requestBody = { adSetId, accessToken: token };
-      console.log('📤 Sending request:', requestBody);
-      
-      const response = await fetch(`${API_URL}/api/ads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-      });
-      
-      console.log('📥 Response status:', response.status);
-      const data = await response.json();
-      console.log('📥 Response data:', data);
-      
-      if (data.success) {
-        console.log(`✅ Got ${data.count} creatives`);
-        setAdCreatives(prev => ({ ...prev, [adSetId]: data.data || [] }));
-        fetchAllCreativeMetrics(adSetId, data.data || [], token);
-      } else {
-        console.error('❌ API error:', data.error);
-      }
-    } catch (err) {
-      console.error(`❌ Error fetching creatives for ad set ${adSetId}:`, err);
-    } finally {
-      setCreativesLoading(prev => ({ ...prev, [adSetId]: false }));
-    }
-  };
+  // Stage 3C - Creatives are now fetched with ad sets, so we only need metrics
+  // fetchCreatives function removed - creatives come from adSet.creatives
 
   const fetchAllCreativeMetrics = async (adSetId, creativesArray, token) => {
     const getRange = getDateRange(dateRange);
