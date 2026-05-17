@@ -722,8 +722,10 @@ export default function App() {
   };
 
   const handleAccountSelect = (accountId, currency) => {
+    console.log(`📢 handleAccountSelect triggered:`, { accountId, currency });
     setSelectedAccount(accountId);
     setSelectedAccountCurrency(currency);
+    console.log(`📢 Calling fetchCampaigns with accountId: ${accountId}`);
     fetchCampaigns(accountId);
   };
 
@@ -858,8 +860,15 @@ export default function App() {
               <select
                 value={selectedAccount}
                 onChange={(e) => {
+                  console.log(`📝 Select changed to:`, e.target.value);
                   const selected = adAccounts.find(a => a.id === e.target.value);
-                  if (selected) handleAccountSelect(selected.id, selected.currency);
+                  console.log(`📝 Found account:`, selected);
+                  if (selected) {
+                    console.log(`✅ Calling handleAccountSelect`);
+                    handleAccountSelect(selected.id, selected.currency);
+                  } else {
+                    console.log(`❌ Account not found in adAccounts`);
+                  }
                 }}
                 style={{
                   padding: '10px 12px',
