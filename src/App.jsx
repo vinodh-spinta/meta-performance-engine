@@ -28,144 +28,7 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
 );
 
 // Creative Card Component - Shows ad copy and creative info
-const CreativeCard = ({ creative, isLeadGen, performanceColor }) => {
-  console.log(`🎬 Rendering CreativeCard:`, {
-    id: creative.id,
-    name: creative.name,
-    adCopy: creative.adCopy,
-    headline: creative.headline,
-    creativeType: creative.creativeType,
-    status: creative.status
-  });
-  
-  const adCopy = creative.adCopy || 'No copy available';
-  const headline = creative.headline || '';
-  const creativeType = creative.creativeType || 'UNKNOWN';
-  
-  const typeIcons = {
-    'STATIC': '🖼️',
-    'VIDEO': '🎥',
-    'CAROUSEL': '📸',
-    'UNKNOWN': '📌',
-    'NONE': '❌',
-    'ERROR': '⚠️'
-  };
-
-  const icon = typeIcons[creativeType] || '📌';
-  const truncatedCopy = adCopy.substring(0, 120) + (adCopy.length > 120 ? '...' : '');
-
-  return (
-    <div style={{
-      background: '#f9fafb',
-      padding: '12px',
-      borderRadius: '6px',
-      border: '1px solid #e5e7eb',
-      display: 'grid',
-      gridTemplateColumns: '60px 1fr',
-      gap: '12px',
-      alignItems: 'flex-start'
-    }}>
-      {/* Creative Type Badge */}
-      <div style={{
-        width: '60px',
-        height: '60px',
-        background: 'white',
-        border: '2px solid #e5e7eb',
-        borderRadius: '6px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '28px',
-        position: 'relative',
-        flexShrink: 0
-      }}>
-        {icon}
-        <span style={{
-          position: 'absolute',
-          bottom: '-8px',
-          right: '-8px',
-          background: '#fff',
-          border: '2px solid #667eea',
-          borderRadius: '50%',
-          width: '24px',
-          height: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '10px',
-          fontWeight: '700',
-          color: '#667eea',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-        }}>
-          {creativeType === 'VIDEO' ? '🎥' : '📌'}
-        </span>
-      </div>
-
-      {/* Creative Details */}
-      <div style={{ flex: 1 }}>
-        <div style={{ marginBottom: '8px' }}>
-          <p style={{ margin: '0 0 4px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-            {creative.name || 'Ad ' + creative.id}
-          </p>
-          <span style={{
-            display: 'inline-block',
-            padding: '2px 8px',
-            background: '#f3f4f6',
-            border: '1px solid #d1d5db',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: '600',
-            color: '#6b7280',
-            marginRight: '6px'
-          }}>
-            {creativeType}
-          </span>
-          <span style={{
-            display: 'inline-block',
-            padding: '2px 8px',
-            background: creative.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
-            border: creative.status === 'ACTIVE' ? '1px solid #6ee7b7' : '1px solid #d1d5db',
-            borderRadius: '4px',
-            fontSize: '10px',
-            fontWeight: '600',
-            color: creative.status === 'ACTIVE' ? '#047857' : '#6b7280'
-          }}>
-            {creative.status}
-          </span>
-        </div>
-
-        {/* Ad Copy Display */}
-        <p style={{
-          margin: '8px 0',
-          fontSize: '12px',
-          lineHeight: '1.4',
-          color: '#374151',
-          background: '#fff',
-          padding: '8px',
-          borderRadius: '4px',
-          border: '1px solid #f3f4f6',
-          fontStyle: 'italic'
-        }}>
-          "{truncatedCopy}"
-        </p>
-
-        {headline && (
-          <p style={{
-            margin: '6px 0',
-            fontSize: '11px',
-            color: '#6b7280',
-            background: '#f0f4ff',
-            padding: '6px',
-            borderRadius: '4px',
-            borderLeft: '3px solid #667eea'
-          }}>
-            <strong>Headline:</strong> {headline}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-};
+// Creative Card component removed - creatives displayed directly in the UI
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -1220,39 +1083,124 @@ export default function App() {
                                                 return (
                                                   <div key={creative.id} style={{
                                                     background: '#f9fafb',
-                                                    padding: '12px',
-                                                    borderRadius: '6px',
+                                                    padding: '16px',
+                                                    borderRadius: '8px',
                                                     border: '1px solid #e5e7eb',
-                                                    display: 'flex',
-                                                    gap: '12px',
-                                                    alignItems: 'flex-start'
+                                                    display: 'grid',
+                                                    gridTemplateColumns: '1fr',
+                                                    gap: '12px'
                                                   }}>
-                                                    {/* Creative Preview */}
-                                                    <CreativeCard creative={creative} isLeadGen={isLeadGen} performanceColor={creativePerformanceColor} />
+                                                    {/* Creative Header */}
+                                                    <div>
+                                                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                                                        <span style={{ fontSize: '20px' }}>{creative.creativeType === 'VIDEO' ? '🎥' : '🖼️'}</span>
+                                                        <div style={{ flex: 1 }}>
+                                                          <p style={{ margin: '0', fontSize: '13px', fontWeight: '700', color: '#1f2937' }}>
+                                                            {creative.name || 'Creative'}
+                                                          </p>
+                                                          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                                                            <span style={{
+                                                              display: 'inline-block',
+                                                              padding: '3px 8px',
+                                                              background: '#f3f4f6',
+                                                              border: '1px solid #d1d5db',
+                                                              borderRadius: '3px',
+                                                              fontSize: '10px',
+                                                              fontWeight: '600',
+                                                              color: '#6b7280'
+                                                            }}>
+                                                              {creative.creativeType}
+                                                            </span>
+                                                            <span style={{
+                                                              display: 'inline-block',
+                                                              padding: '3px 8px',
+                                                              background: creative.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
+                                                              border: creative.status === 'ACTIVE' ? '1px solid #6ee7b7' : '1px solid #d1d5db',
+                                                              borderRadius: '3px',
+                                                              fontSize: '10px',
+                                                              fontWeight: '600',
+                                                              color: creative.status === 'ACTIVE' ? '#047857' : '#6b7280'
+                                                            }}>
+                                                              {creative.status}
+                                                            </span>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    </div>
+
+                                                    {/* Ad Copy */}
+                                                    {creative.adCopy && creative.adCopy !== 'No copy' && (
+                                                      <div style={{
+                                                        background: '#fff',
+                                                        padding: '10px',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid #e5e7eb',
+                                                        fontSize: '12px',
+                                                        lineHeight: '1.5',
+                                                        color: '#374151'
+                                                      }}>
+                                                        <strong>Copy:</strong> {creative.adCopy.substring(0, 200)}{creative.adCopy.length > 200 ? '...' : ''}
+                                                      </div>
+                                                    )}
+
+                                                    {/* Headline */}
+                                                    {creative.headline && (
+                                                      <div style={{
+                                                        background: '#f0f4ff',
+                                                        padding: '10px',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid #c7d2fe',
+                                                        borderLeft: '3px solid #667eea',
+                                                        fontSize: '12px',
+                                                        color: '#4f46e5'
+                                                      }}>
+                                                        <strong>Headline:</strong> {creative.headline}
+                                                      </div>
+                                                    )}
 
                                                     {/* Creative Metrics */}
-                                                    <div style={{ flex: 1 }}>
-                                                      <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-                                                        {creative.name || 'Creative'}
-                                                      </p>
-                                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '8px', fontSize: '11px' }}>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Spend:</span> <span style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(creativeMetric.spend)}</span>
+                                                    <div style={{
+                                                      display: 'grid',
+                                                      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                                                      gap: '8px',
+                                                      fontSize: '11px',
+                                                      paddingTop: '8px',
+                                                      borderTop: '1px solid #e5e7eb'
+                                                    }}>
+                                                      <div>
+                                                        <span style={{ color: '#6b7280' }}>Spend:</span>
+                                                        <div style={{ fontWeight: '600', color: '#3b82f6', fontSize: '12px', marginTop: '2px' }}>
+                                                          {formatCurrency(creativeMetric.spend)}
                                                         </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Impressions:</span> <span style={{ fontWeight: '600', color: '#8b5cf6' }}>{formatNumber(creativeMetric.impressions)}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span style={{ color: '#6b7280' }}>Impressions:</span>
+                                                        <div style={{ fontWeight: '600', color: '#8b5cf6', fontSize: '12px', marginTop: '2px' }}>
+                                                          {formatNumber(creativeMetric.impressions)}
                                                         </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Clicks:</span> <span style={{ fontWeight: '600', color: '#06b6d4' }}>{formatNumber(creativeMetric.clicks)}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span style={{ color: '#6b7280' }}>Clicks:</span>
+                                                        <div style={{ fontWeight: '600', color: '#06b6d4', fontSize: '12px', marginTop: '2px' }}>
+                                                          {formatNumber(creativeMetric.clicks)}
                                                         </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>Freq:</span> <span style={{ fontWeight: '600', color: '#f59e0b' }}>{(parseFloat(creativeMetric.frequency) || 0).toFixed(2)}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span style={{ color: '#6b7280' }}>CTR:</span>
+                                                        <div style={{ fontWeight: '600', color: '#f59e0b', fontSize: '12px', marginTop: '2px' }}>
+                                                          {(parseFloat(creativeMetric.ctr) || 0).toFixed(2)}%
                                                         </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Conv'}:</span> <span style={{ fontWeight: '600', color: '#10b981' }}>{isLeadGen ? formatNumber(creativeMetric.leads) : formatNumber(creativeMetric.purchases)}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Conv'}:</span>
+                                                        <div style={{ fontWeight: '600', color: '#10b981', fontSize: '12px', marginTop: '2px' }}>
+                                                          {isLeadGen ? formatNumber(creativeMetric.leads) : formatNumber(creativeMetric.purchases)}
                                                         </div>
-                                                        <div>
-                                                          <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span> <span style={{ fontWeight: '600', color: creativePerformanceColor }}>{isLeadGen ? formatCurrency(creativeMetric.cpl) : `${(parseFloat(creativeMetric.roas) || 0).toFixed(2)}x`}</span>
+                                                      </div>
+                                                      <div>
+                                                        <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span>
+                                                        <div style={{ fontWeight: '600', color: creativePerformanceColor, fontSize: '12px', marginTop: '2px' }}>
+                                                          {isLeadGen ? formatCurrency(creativeMetric.cpl) : `${(parseFloat(creativeMetric.roas) || 0).toFixed(2)}x`}
                                                         </div>
                                                       </div>
                                                     </div>
