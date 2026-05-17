@@ -630,7 +630,6 @@ export default function App() {
     setExpandedCreatives(null);
     setAdSets({});
     setAdSetMetrics({});
-    setAdCreatives({});
     setCreativeMetrics({});
     setError('');
     setSuccess('');
