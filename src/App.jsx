@@ -541,7 +541,7 @@ export default function App() {
     setSuccess('');
   };
 
-  const fetchAdAccounts = async () => {
+  const fetchAdAccounts = React.useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/api/ad-accounts`, {
@@ -560,7 +560,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [accessToken]);
 
   /* eslint-disable-next-line react-hooks/exhaustive-deps */
   useEffect(() => {
@@ -592,7 +592,7 @@ export default function App() {
     }
   };
 
-  const fetchCampaignMetrics = async (campaignIds) => {
+  const fetchCampaignMetrics = React.useCallback(async (campaignIds) => {
     try {
       const getRange = getDateRange(dateRange);
       const { start, end } = getRange;
@@ -628,7 +628,7 @@ export default function App() {
     } catch (err) {
       console.error('Error fetching metrics:', err);
     }
-  };
+  }, [dateRange, accessToken]);
 
   const fetchAdSets = async (campaignId) => {
     try {
