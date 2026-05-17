@@ -505,167 +505,82 @@ app.post('/api/ads', async (req, res) => {
 
     console.log(`\n📊 Fetching ads/creatives for ad set: ${adSetId}`);
 
-    // Get all ads under this ad set
+    // Get all ads with creative data inline - no separate requests
     const adsResponse = await axios.get(
       `https://graph.facebook.com/${API_VERSION}/${adSetId}/ads`,
       {
         params: {
-          fields: 'id,name,status,created_time,adset_id',
+          fields: 'id,name,status,created_time,adset_id,creative{id,name,object_story_spec,video_data}',
           access_token: accessToken
         }
       }
     );
 
     let ads = adsResponse.data.data || [];
-    console.log(`✅ Found ${ads.length} ads in ad set`);
+    console.log(`✅ Found ${ads.length} ads in ad set\n`);
 
-    // For each ad, get its creative data
-    const adsWithCreatives = await Promise.all(
-      ads.map(async (ad) => {
-        try {
-          console.log(`\n🔍 Fetching creative for ad: ${ad.id}`);
-          
-          // Get the ad with creative info
-          const adDetailsResponse = await axios.get(
-            `https://graph.facebook.com/${API_VERSION}/${ad.id}`,
-            {
-              params: {
-                fields: 'id,name,creative',
-                access_token: accessToken
-              }
-            }
-          );
+    // Process ads and extract creative data
+    const adsWithCreatives = ads.map((ad, index) => {
+      console.log(`🔍 Processing ad ${index + 1}/${ads.length}: ${ad.name}`);
+      
+      let adCopy = 'No copy available';
+      let creativeType = 'UNKNOWN';
+      let headline = '';
+      let description = '';
+      let creativeId = null;
+      let creativeName = 'No Creative';
 
-          const adDetails = adDetailsResponse.data;
-          console.log(`   Ad has creative:`, adDetails.creative?.id);
+      if (ad.creative) {
+        creativeId = ad.creative.id;
+        creativeName = ad.creative.name || 'Creative ' + ad.creative.id;
+        
+        console.log(`   Creative: ${creativeName}`);
 
-          // If creative exists, get its details
-          if (adDetails.creative?.id) {
-            try {
-              console.log(`\n   🔗 Fetching creative ID: ${adDetails.creative.id}`);
-              
-              const creativeResponse = await axios.get(
-                `https://graph.facebook.com/${API_VERSION}/${adDetails.creative.id}`,
-                {
-                  params: {
-                    fields: 'id,name,object_story_spec,video_data',
-                    access_token: accessToken
-                  }
-                }
-              );
-
-              const creative = creativeResponse.data;
-              console.log(`   ✅ Creative fetched successfully`);
-              console.log(`      ID: ${creative.id}`);
-              console.log(`      Name: ${creative.name}`);
-              console.log(`      Has object_story_spec: ${!!creative.object_story_spec}`);
-              console.log(`      Has video_data: ${!!creative.video_data}`);
-
-              // Extract ad copy and creative type
-              let adCopy = 'No copy available';
-              let creativeType = 'UNKNOWN';
-              let headline = '';
-              let description = '';
-
-              // Check object_story_spec for text content
-              if (creative.object_story_spec) {
-                console.log(`      Parsing object_story_spec...`);
-                
-                if (creative.object_story_spec.link_data?.message) {
-                  adCopy = creative.object_story_spec.link_data.message;
-                  creativeType = 'STATIC';
-                  console.log(`      ✅ Found message (copy)`);
-                }
-                if (creative.object_story_spec.link_data?.headline) {
-                  headline = creative.object_story_spec.link_data.headline;
-                  console.log(`      ✅ Found headline`);
-                }
-                if (creative.object_story_spec.link_data?.description) {
-                  description = creative.object_story_spec.link_data.description;
-                  console.log(`      ✅ Found description`);
-                }
-              } else {
-                console.log(`      ⚠️ No object_story_spec found`);
-              }
-
-              // Check if it's a video
-              if (creative.video_data) {
-                creativeType = 'VIDEO';
-                console.log(`      ✅ Detected VIDEO creative`);
-              }
-
-              console.log(`      Final adCopy length: ${adCopy.length}`);
-              console.log(`      Final creativeType: ${creativeType}\n`);
-
-              return {
-                id: ad.id,
-                name: ad.name,
-                status: ad.status,
-                created_time: ad.created_time,
-                creativeId: creative.id,
-                creativeName: creative.name,
-                adCopy: adCopy,
-                headline: headline,
-                description: description,
-                creativeType: creativeType,
-                rawCreative: creative
-              };
-            } catch (creativeErr) {
-              console.log(`   ❌ FAILED to fetch creative details`);
-              console.log(`      Error: ${creativeErr.message}`);
-              console.log(`      Status: ${creativeErr.response?.status}`);
-              console.log(`      Response: ${JSON.stringify(creativeErr.response?.data)}\n`);
-              
-              return {
-                id: ad.id,
-                name: ad.name,
-                status: ad.status,
-                created_time: ad.created_time,
-                creativeId: adDetails.creative.id,
-                creativeName: 'Unknown Creative',
-                adCopy: `Error: ${creativeErr.message}`,
-                headline: '',
-                description: '',
-                creativeType: 'UNKNOWN',
-                rawCreative: adDetails.creative
-              };
-            }
-          } else {
-            console.log(`   ⚠️ Ad has no creative attached`);
-            return {
-              id: ad.id,
-              name: ad.name,
-              status: ad.status,
-              created_time: ad.created_time,
-              creativeId: null,
-              creativeName: 'No Creative',
-              adCopy: 'No creative attached',
-              headline: '',
-              description: '',
-              creativeType: 'NONE',
-              rawCreative: null
-            };
-          }
-        } catch (err) {
-          console.log(`   ❌ Error processing ad ${ad.id}:`, err.message);
-          return {
-            id: ad.id,
-            name: ad.name,
-            status: ad.status,
-            created_time: ad.created_time,
-            creativeId: null,
-            creativeName: 'Error',
-            adCopy: `Error: ${err.message}`,
-            headline: '',
-            description: '',
-            creativeType: 'ERROR',
-            rawCreative: null
-          };
+        // Check if it's a video
+        if (ad.creative.video_data) {
+          creativeType = 'VIDEO';
+          console.log(`   Type: VIDEO`);
+        } else if (ad.creative.object_story_spec) {
+          creativeType = 'STATIC';
+          console.log(`   Type: STATIC`);
         }
-      })
-    );
 
-    console.log(`\n✅ Successfully processed ${adsWithCreatives.length} ads with creative data\n`);
+        // Extract text from object_story_spec
+        if (ad.creative.object_story_spec?.link_data) {
+          const linkData = ad.creative.object_story_spec.link_data;
+          
+          if (linkData.message) {
+            adCopy = linkData.message;
+            console.log(`   ✅ Got message: ${adCopy.substring(0, 50)}...`);
+          }
+          if (linkData.headline) {
+            headline = linkData.headline;
+            console.log(`   ✅ Got headline: ${headline}`);
+          }
+          if (linkData.description) {
+            description = linkData.description;
+            console.log(`   ✅ Got description: ${description.substring(0, 50)}...`);
+          }
+        }
+      } else {
+        console.log(`   ⚠️ No creative attached`);
+      }
+
+      return {
+        id: ad.id,
+        name: ad.name,
+        status: ad.status,
+        created_time: ad.created_time,
+        creativeId: creativeId,
+        creativeName: creativeName,
+        adCopy: adCopy,
+        headline: headline,
+        description: description,
+        creativeType: creativeType
+      };
+    });
+
+    console.log(`\n✅ Successfully processed ${adsWithCreatives.length} ads\n`);
 
     res.json({
       success: true,
@@ -680,7 +595,8 @@ app.post('/api/ads', async (req, res) => {
     
     res.status(500).json({
       success: false,
-      error: error.response?.data?.error?.message || error.message
+      error: error.response?.data?.error?.message || error.message,
+      details: error.response?.data
     });
   }
 });
