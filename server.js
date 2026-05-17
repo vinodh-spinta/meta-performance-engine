@@ -203,15 +203,35 @@ app.post('/api/ad-sets', async (req, res) => {
 
     // Process ad sets and extract creatives
     const adSetsWithCreatives = adSets.map((adSet) => {
-      const creatives = (adSet.ads?.data || []).map((ad) => {
+      const creatives = (adSet.ads?.data || []).map((ad, index) => {
         let adCopy = 'No copy';
         let headline = '';
         let creativeType = 'STATIC';
 
-        if (ad.creative?.object_story_spec?.link_data) {
-          const linkData = ad.creative.object_story_spec.link_data;
-          if (linkData.message) adCopy = linkData.message;
-          if (linkData.headline) headline = linkData.headline;
+        console.log(`\n📝 Processing creative ${index + 1}:`);
+        console.log(`   Ad ID: ${ad.id}`);
+        console.log(`   Ad Name: ${ad.name}`);
+        console.log(`   Creative ID: ${ad.creative?.id}`);
+        console.log(`   Has object_story_spec: ${!!ad.creative?.object_story_spec}`);
+        
+        if (ad.creative?.object_story_spec) {
+          console.log(`   object_story_spec keys:`, Object.keys(ad.creative.object_story_spec));
+          const oss = ad.creative.object_story_spec;
+          
+          if (oss.link_data) {
+            console.log(`   ✅ Has link_data`);
+            const linkData = oss.link_data;
+            if (linkData.message) {
+              adCopy = linkData.message;
+              console.log(`   📄 Message: ${adCopy.substring(0, 50)}...`);
+            }
+            if (linkData.headline) {
+              headline = linkData.headline;
+              console.log(`   📌 Headline: ${headline}`);
+            }
+          } else {
+            console.log(`   ❌ NO link_data. Available keys:`, Object.keys(oss));
+          }
         }
 
         return {
