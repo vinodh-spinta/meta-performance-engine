@@ -559,12 +559,21 @@ export default function App() {
   };
 
   const handleAdSetClick = (adSetId) => {
+    console.log(`📢 handleAdSetClick triggered for adSetId: ${adSetId}`);
+    console.log(`   expandedCreatives currently: ${expandedCreatives}`);
+    
     if (expandedCreatives === adSetId) {
+      console.log(`   Collapsing creatives for this ad set`);
       setExpandedCreatives(null);
     } else {
+      console.log(`   Expanding creatives for this ad set`);
       setExpandedCreatives(adSetId);
+      console.log(`   Checking if creatives already loaded: ${!!adCreatives[adSetId]}`);
       if (!adCreatives[adSetId]) {
+        console.log(`   ✅ Calling fetchCreatives...`);
         fetchCreatives(adSetId, accessToken);
+      } else {
+        console.log(`   ✅ Creatives already loaded, skipping fetch`);
       }
     }
   };
