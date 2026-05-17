@@ -42,7 +42,7 @@ app.get('/api/auth/login-url', (req, res) => {
   
   res.json({
     success: true,
-    url: loginUrl
+    loginUrl: loginUrl
   });
 });
 
