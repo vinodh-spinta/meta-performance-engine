@@ -542,6 +542,8 @@ app.post('/api/ads', async (req, res) => {
           // If creative exists, get its details
           if (adDetails.creative?.id) {
             try {
+              console.log(`\n   🔗 Fetching creative ID: ${adDetails.creative.id}`);
+              
               const creativeResponse = await axios.get(
                 `https://graph.facebook.com/${API_VERSION}/${adDetails.creative.id}`,
                 {
@@ -553,7 +555,11 @@ app.post('/api/ads', async (req, res) => {
               );
 
               const creative = creativeResponse.data;
-              console.log(`   Creative data retrieved:`, { id: creative.id, name: creative.name });
+              console.log(`   ✅ Creative fetched successfully`);
+              console.log(`      ID: ${creative.id}`);
+              console.log(`      Name: ${creative.name}`);
+              console.log(`      Has object_story_spec: ${!!creative.object_story_spec}`);
+              console.log(`      Has video_data: ${!!creative.video_data}`);
 
               // Extract ad copy and creative type
               let adCopy = 'No copy available';
@@ -562,25 +568,34 @@ app.post('/api/ads', async (req, res) => {
               let description = '';
 
               // Check object_story_spec for text content
-              if (creative.object_story_spec?.link_data?.message) {
-                adCopy = creative.object_story_spec.link_data.message;
-                creativeType = 'STATIC';
-                console.log(`   ✅ Found message (copy):`);
-              }
-              if (creative.object_story_spec?.link_data?.headline) {
-                headline = creative.object_story_spec.link_data.headline;
-                console.log(`   ✅ Found headline`);
-              }
-              if (creative.object_story_spec?.link_data?.description) {
-                description = creative.object_story_spec.link_data.description;
-                console.log(`   ✅ Found description`);
+              if (creative.object_story_spec) {
+                console.log(`      Parsing object_story_spec...`);
+                
+                if (creative.object_story_spec.link_data?.message) {
+                  adCopy = creative.object_story_spec.link_data.message;
+                  creativeType = 'STATIC';
+                  console.log(`      ✅ Found message (copy)`);
+                }
+                if (creative.object_story_spec.link_data?.headline) {
+                  headline = creative.object_story_spec.link_data.headline;
+                  console.log(`      ✅ Found headline`);
+                }
+                if (creative.object_story_spec.link_data?.description) {
+                  description = creative.object_story_spec.link_data.description;
+                  console.log(`      ✅ Found description`);
+                }
+              } else {
+                console.log(`      ⚠️ No object_story_spec found`);
               }
 
               // Check if it's a video
               if (creative.video_data) {
                 creativeType = 'VIDEO';
-                console.log(`   ✅ Detected VIDEO creative`);
+                console.log(`      ✅ Detected VIDEO creative`);
               }
+
+              console.log(`      Final adCopy length: ${adCopy.length}`);
+              console.log(`      Final creativeType: ${creativeType}\n`);
 
               return {
                 id: ad.id,
@@ -596,7 +611,11 @@ app.post('/api/ads', async (req, res) => {
                 rawCreative: creative
               };
             } catch (creativeErr) {
-              console.log(`   ⚠️ Could not fetch creative details:`, creativeErr.message);
+              console.log(`   ❌ FAILED to fetch creative details`);
+              console.log(`      Error: ${creativeErr.message}`);
+              console.log(`      Status: ${creativeErr.response?.status}`);
+              console.log(`      Response: ${JSON.stringify(creativeErr.response?.data)}\n`);
+              
               return {
                 id: ad.id,
                 name: ad.name,
@@ -604,7 +623,7 @@ app.post('/api/ads', async (req, res) => {
                 created_time: ad.created_time,
                 creativeId: adDetails.creative.id,
                 creativeName: 'Unknown Creative',
-                adCopy: 'Could not retrieve copy',
+                adCopy: `Error: ${creativeErr.message}`,
                 headline: '',
                 description: '',
                 creativeType: 'UNKNOWN',
