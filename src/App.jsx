@@ -1178,7 +1178,6 @@ export default function App() {
                                   purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
                                 };
                                 const adSetPerformanceColor = getPerformanceColor(campaign.objective, adSetMetric);
-                                const adSetCreatives = adCreatives[adSet.id] || [];
 
                                 return (
                                   <div key={adSet.id}>
