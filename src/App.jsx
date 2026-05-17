@@ -27,8 +27,376 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
   }} />
 );
 
-// Creative Card Component - Shows ad copy and creative info
-// Creative Card component removed - creatives displayed directly in the UI
+// Creative-First Section Component
+const CreativeSection = ({ adSet, campaign, isLeadGen, creativeMetrics, formatCurrency, formatNumber }) => {
+  const [expandedCreative, setExpandedCreative] = useState(null);
+  const [sortBy, setSortBy] = useState('spend');
+
+  const creatives = adSet.creatives || [];
+
+  // Sort creatives
+  const sortedCreatives = [...creatives].sort((a, b) => {
+    const metricsA = creativeMetrics[a.id] || {};
+    const metricsB = creativeMetrics[b.id] || {};
+
+    if (sortBy === 'spend') return (metricsB.spend || 0) - (metricsA.spend || 0);
+    if (sortBy === 'impressions') return (metricsB.impressions || 0) - (metricsA.impressions || 0);
+    if (sortBy === 'performance') {
+      const perfA = isLeadGen ? (metricsA.leads || 0) : (metricsA.purchases || 0);
+      const perfB = isLeadGen ? (metricsB.leads || 0) : (metricsB.purchases || 0);
+      return perfB - perfA;
+    }
+    return 0;
+  });
+
+  return (
+    <div style={{
+      borderTop: '2px solid #e5e7eb',
+      marginTop: '24px',
+      paddingTop: '24px'
+    }}>
+      {/* Section Header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '20px'
+      }}>
+        <div>
+          <h4 style={{
+            margin: '0 0 4px',
+            fontSize: '16px',
+            fontWeight: '700',
+            color: '#1f2937'
+          }}>
+            🎬 Creatives ({creatives.length})
+          </h4>
+          <p style={{
+            margin: '0',
+            fontSize: '12px',
+            color: '#6b7280'
+          }}>
+            {campaign.name} • {adSet.name}
+          </p>
+        </div>
+
+        {/* Sort Options */}
+        {creatives.length > 1 && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {['spend', 'impressions', 'performance'].map((option) => (
+              <button
+                key={option}
+                onClick={() => setSortBy(option)}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  fontWeight: sortBy === option ? '700' : '500',
+                  background: sortBy === option ? '#667eea' : '#f3f4f6',
+                  color: sortBy === option ? '#fff' : '#6b7280',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {option === 'spend' ? '💰 Spend' : option === 'impressions' ? '👁️ Views' : '⭐ Performance'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Creatives Grid - Card View */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))',
+        gap: '20px'
+      }}>
+        {sortedCreatives.map((creative) => {
+          const metric = creativeMetrics[creative.id] || {
+            spend: 0,
+            impressions: 0,
+            clicks: 0,
+            ctr: 0,
+            cpc: 0,
+            purchases: 0,
+            purchaseValue: 0,
+            roas: 0,
+            leads: 0,
+            cpl: 0,
+            frequency: 0
+          };
+
+          const isExpanded = expandedCreative === creative.id;
+          const perfScore = isLeadGen ? metric.leads : metric.purchases;
+
+          // Performance color
+          let perfColor = '#9ca3af';
+          if (perfScore > 10) perfColor = '#10b981';
+          else if (perfScore > 5) perfColor = '#f59e0b';
+          else if (perfScore > 0) perfColor = '#ef4444';
+
+          return (
+            <div
+              key={creative.id}
+              onClick={() => setExpandedCreative(isExpanded ? null : creative.id)}
+              style={{
+                background: '#fff',
+                border: isExpanded ? '2px solid #667eea' : '1px solid #e5e7eb',
+                borderRadius: '12px',
+                padding: '24px',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                boxShadow: isExpanded ? '0 10px 25px rgba(102, 126, 234, 0.15)' : '0 1px 3px rgba(0,0,0,0.1)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}
+            >
+              {/* Creative Type & Status Badge */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: '12px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  flexWrap: 'wrap'
+                }}>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    background: creative.creativeType === 'VIDEO' ? '#fef3c7' : '#dbeafe',
+                    color: creative.creativeType === 'VIDEO' ? '#92400e' : '#075985',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}>
+                    {creative.creativeType === 'VIDEO' ? '🎥' : '🖼️'}
+                    {creative.creativeType}
+                  </span>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    background: creative.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
+                    color: creative.status === 'ACTIVE' ? '#047857' : '#6b7280',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}>
+                    {creative.status === 'ACTIVE' ? '✓' : '−'}
+                    {creative.status}
+                  </span>
+                </div>
+
+                {/* Performance Indicator */}
+                <div style={{
+                  textAlign: 'right'
+                }}>
+                  <div style={{
+                    fontSize: '24px',
+                    fontWeight: '700',
+                    color: perfColor
+                  }}>
+                    {perfScore}
+                  </div>
+                  <div style={{
+                    fontSize: '10px',
+                    color: '#6b7280',
+                    marginTop: '2px'
+                  }}>
+                    {isLeadGen ? 'Leads' : 'Conv'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Creative Name/Title */}
+              <div>
+                <h3 style={{
+                  margin: '0 0 8px',
+                  fontSize: '15px',
+                  fontWeight: '700',
+                  color: '#1f2937',
+                  lineHeight: '1.4'
+                }}>
+                  {creative.name}
+                </h3>
+              </div>
+
+              {/* Ad Copy - PROMINENT */}
+              <div style={{
+                background: '#f9fafb',
+                padding: '16px',
+                borderRadius: '8px',
+                borderLeft: '4px solid #667eea',
+                minHeight: '80px',
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <p style={{
+                  margin: '0',
+                  fontSize: '13px',
+                  lineHeight: '1.6',
+                  color: '#374151'
+                }}>
+                  {creative.adCopy === 'No copy' ? (
+                    <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>No copy available</span>
+                  ) : (
+                    creative.adCopy.substring(0, 300) + (creative.adCopy.length > 300 ? '...' : '')
+                  )}
+                </p>
+              </div>
+
+              {/* Headline if available */}
+              {creative.headline && (
+                <div style={{
+                  padding: '12px',
+                  background: '#f0f4ff',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: '#4f46e5',
+                  borderLeft: '3px solid #4f46e5',
+                  fontWeight: '500'
+                }}>
+                  <strong>Headline:</strong> {creative.headline}
+                </div>
+              )}
+
+              {/* Key Metrics Row - Always Visible */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '12px',
+                paddingTop: '16px',
+                borderTop: '2px solid #f3f4f6'
+              }}>
+                <div>
+                  <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>SPEND</div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>
+                    ${(metric.spend || 0).toFixed(0)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>IMPRESSIONS</div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>
+                    {(metric.impressions || 0).toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>CTR</div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: '#06b6d4' }}>
+                    {(metric.ctr || 0).toFixed(2)}%
+                  </div>
+                </div>
+              </div>
+
+              {/* Expandable Details */}
+              {isExpanded && (
+                <div style={{
+                  paddingTop: '16px',
+                  borderTop: '2px solid #f3f4f6',
+                  animation: 'fadeIn 0.2s'
+                }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>CLICKS</div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
+                        {(metric.clicks || 0).toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>CPC</div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
+                        ${(metric.cpc || 0).toFixed(2)}
+                      </div>
+                    </div>
+                    <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>FREQUENCY</div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
+                        {(metric.frequency || 0).toFixed(2)}x
+                      </div>
+                    </div>
+                    <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                      <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>
+                        {isLeadGen ? 'CPL' : 'ROAS'}
+                      </div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
+                        {isLeadGen ? `$${(metric.cpl || 0).toFixed(2)}` : `${(metric.roas || 0).toFixed(2)}x`}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expand Indicator */}
+                  <div style={{
+                    padding: '12px',
+                    background: '#f0f4ff',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    color: '#4f46e5',
+                    textAlign: 'center',
+                    fontWeight: '500'
+                  }}>
+                    ↑ Click to collapse • 🚀 More features coming soon
+                  </div>
+                </div>
+              )}
+
+              {/* Hover Hint */}
+              {!isExpanded && (
+                <div style={{
+                  fontSize: '10px',
+                  color: '#9ca3af',
+                  textAlign: 'center',
+                  fontStyle: 'italic'
+                }}>
+                  Click to expand details
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {creatives.length === 0 && (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          background: '#f9fafb',
+          borderRadius: '8px',
+          color: '#9ca3af'
+        }}>
+          No creatives found
+        </div>
+      )}
+
+      {/* Future Features Placeholder */}
+      {creatives.length > 0 && (
+        <div style={{
+          marginTop: '30px',
+          padding: '16px',
+          background: '#f0f4ff',
+          borderRadius: '8px',
+          borderLeft: '4px solid #667eea',
+          fontSize: '12px',
+          color: '#4f46e5'
+        }}>
+          <strong>🚀 Coming Soon:</strong> Video previews • A/B test insights • Trend charts • AI recommendations • Audience breakdown
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -48,391 +416,109 @@ export default function App() {
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [sortBy, setSortBy] = useState('performance');
   const [loggingIn, setLoggingIn] = useState(false);
-  
+
   // Stage 3B - Ad Sets
   const [expandedCreatives, setExpandedCreatives] = useState(null);
   const [adSets, setAdSets] = useState({});
   const [adSetMetrics, setAdSetMetrics] = useState({});
   const [adSetsLoading, setAdSetsLoading] = useState({});
-  
+
   // Stage 3C - Creatives (pulled with ad sets, metrics only)
   const [creativeMetrics, setCreativeMetrics] = useState({});
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
       'USD': '$', 'INR': '₹', 'EUR': '€', 'GBP': '£', 'AUD': 'A$',
-      'CAD': 'C$', 'JPY': '¥', 'SGD': 'S$', 'HKD': 'HK$', 'NZD': 'NZ$'
+      'CAD': 'C$', 'SGD': 'S$', 'HKD': 'HK$', 'JPY': '¥', 'CNY': '¥',
+      'AED': 'د.إ', 'SAR': '﷼'
     };
-    return symbols[currency] || currency;
+    return symbols[currency] || '$';
   };
 
-  const isLeadGenCampaign = (objective) => {
-    const leadObjectives = ['LEAD_GENERATION', 'MESSAGES', 'OUTCOME_LEADS'];
-    return leadObjectives.includes(objective);
+  const formatCurrency = (value) => {
+    const symbol = getCurrencySymbol(selectedAccountCurrency);
+    if (value >= 1000000) return `${symbol}${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${symbol}${(value / 1000).toFixed(1)}K`;
+    return `${symbol}${value.toFixed(2)}`;
   };
 
-  const isEcommerceCampaign = (objective) => {
-    const ecommerceObjectives = ['SALES', 'PRODUCT_CATALOG_SALES', 'CONVERSIONS', 'OUTCOME_SALES'];
-    return ecommerceObjectives.includes(objective);
+  const formatNumber = (num) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return Math.round(num);
   };
 
-  const getPerformanceColor = (objective, metrics) => {
-    if (isLeadGenCampaign(objective)) {
-      const cpl = parseFloat(metrics?.cpl) || 0;
-      if (cpl === 0) return '#6b7280';
-      if (cpl <= 5) return '#8b5cf6';
-      if (cpl <= 10) return '#10b981';
-      if (cpl <= 25) return '#3b82f6';
-      if (cpl <= 50) return '#f59e0b';
-      return '#ef4444';
+  const getPerformanceColor = (objective, metric) => {
+    let perfValue = 0;
+    if (objective && (objective.includes('LEAD') || objective.includes('lead'))) {
+      perfValue = metric.leads || 0;
     } else {
-      const roas = parseFloat(metrics?.roas) || 0;
-      if (roas >= 3) return '#8b5cf6';
-      if (roas >= 2) return '#10b981';
-      if (roas >= 1.5) return '#3b82f6';
-      if (roas >= 1) return '#f59e0b';
-      if (roas > 0) return '#ef4444';
-      return '#6b7280';
+      perfValue = metric.purchases || 0;
     }
+    if (perfValue > 10) return '#10b981';
+    if (perfValue > 5) return '#f59e0b';
+    if (perfValue > 0) return '#ef4444';
+    return '#9ca3af';
   };
 
-  const getPerformanceLabel = (objective, metrics) => {
-    if (isLeadGenCampaign(objective)) {
-      const cpl = parseFloat(metrics?.cpl) || 0;
-      if (cpl === 0) return '📊 No Data';
-      if (cpl <= 5) return '🌟 Excellent';
-      if (cpl <= 10) return '✨ Good';
-      if (cpl <= 25) return '👍 Fair';
-      if (cpl <= 50) return '⚠️ High';
-      return '❌ Very High';
-    } else {
-      const roas = parseFloat(metrics?.roas) || 0;
-      if (roas >= 3) return '🌟 Exceptional';
-      if (roas >= 2) return '✨ Excellent';
-      if (roas >= 1.5) return '👍 Good';
-      if (roas >= 1) return '⚠️ Fair';
-      if (roas > 0) return '❌ Poor';
-      return '📊 No Data';
-    }
-  };
+  const getDateRange = (range) => {
+    const endDate = new Date();
+    const startDate = new Date();
 
-  const getDateRange = (preset) => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const quarterStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
-    const formatDate = (date) => date.toISOString().split('T')[0];
+    switch (range) {
+      case 'today':
+        startDate.setDate(endDate.getDate());
+        break;
+      case 'yesterday':
+        startDate.setDate(endDate.getDate() - 1);
+        endDate.setDate(endDate.getDate() - 1);
+        break;
+      case 'mtd':
+        startDate.setDate(1);
+        break;
+      case 'qtd':
+        const quarter = Math.floor(startDate.getMonth() / 3);
+        startDate.setMonth(quarter * 3, 1);
+        break;
+      case '7':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '30':
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      case '90':
+        startDate.setDate(endDate.getDate() - 90);
+        break;
+    }
 
     return {
-      'today': { start: formatDate(today), end: formatDate(today) },
-      'yesterday': { start: formatDate(yesterday), end: formatDate(yesterday) },
-      'mtd': { start: formatDate(monthStart), end: formatDate(today) },
-      'qtd': { start: formatDate(quarterStart), end: formatDate(today) },
-      '7': { days: 7 },
-      '30': { days: 30 },
-      '90': { days: 90 }
-    }[preset];
-  };
-
-  const sortCampaigns = (campaignsToSort) => {
-    const sorted = [...campaignsToSort];
-    switch (sortBy) {
-      case 'performance':
-        sorted.sort((a, b) => {
-          const metricsA = campaignMetrics[a.id] || {};
-          const metricsB = campaignMetrics[b.id] || {};
-          
-          if (isLeadGenCampaign(a.objective) && isLeadGenCampaign(b.objective)) {
-            return (parseFloat(metricsA.cpl) || Infinity) - (parseFloat(metricsB.cpl) || Infinity);
-          } else if (isEcommerceCampaign(a.objective) && isEcommerceCampaign(b.objective)) {
-            return (parseFloat(metricsB.roas) || 0) - (parseFloat(metricsA.roas) || 0);
-          }
-          return 0;
-        });
-        break;
-      case 'spend':
-        sorted.sort((a, b) => (parseFloat(campaignMetrics[b.id]?.spend) || 0) - (parseFloat(campaignMetrics[a.id]?.spend) || 0));
-        break;
-      case 'impressions':
-        sorted.sort((a, b) => (parseInt(campaignMetrics[b.id]?.impressions) || 0) - (parseInt(campaignMetrics[a.id]?.impressions) || 0));
-        break;
-      default:
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    return sorted;
-  };
-
-  /* eslint-disable react-hooks/exhaustive-deps */
-  useEffect(() => {
-    let filtered = campaigns;
-    if (showActiveOnly) {
-      filtered = filtered.filter(c => c.status === 'ACTIVE');
-    }
-    filtered = sortCampaigns(filtered);
-    setFilteredCampaigns(filtered);
-  }, [campaigns, showActiveOnly, sortBy, campaignMetrics]);
-  /* eslint-enable react-hooks/exhaustive-deps */
-
-  const fetchCampaigns = async (accountId, token) => {
-    setLoading(true);
-    setError('');
-    setSuccess('');
-    try {
-      const cleanAccountId = accountId.replace('act_', '');
-      const response = await fetch(`${API_URL}/api/campaigns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adAccountId: cleanAccountId, accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCampaigns(data.data || []);
-        setCampaignMetrics({});
-        setSuccess(`✅ Loaded ${data.count} campaigns. Fetching metrics...`);
-        fetchAllCampaignMetrics(data.data || [], token, dateRange);
-      } else {
-        setError(`Failed: ${data.error}`);
-      }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAllCampaignMetrics = async (campaignsArray, token, range) => {
-    setMetricsLoading(true);
-    const getRange = getDateRange(range);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (campaign, timeoutMs = 15000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/campaign-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ campaignId: campaign.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
+      start: startDate.toISOString().split('T')[0],
+      end: endDate.toISOString().split('T')[0],
+      days: range === '7' ? 7 : range === '30' ? 30 : range === '90' ? 90 : null
     };
-
-    const promises = campaignsArray.map(async (campaign, index) => {
-      try {
-        const data = await fetchWithTimeout(campaign);
-        
-        if (data.success) {
-          metricsMap[campaign.id] = data.data;
-        } else {
-          metricsMap[campaign.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-          };
-        }
-        setSuccess(`✅ Loading metrics... ${index + 1}/${campaignsArray.length}`);
-      } catch (err) {
-        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
-        metricsMap[campaign.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setCampaignMetrics(metricsMap);
-    setMetricsLoading(false);
-    setSuccess(`✅ All metrics loaded!`);
   };
-
-  // Stage 3B - Fetch Ad Sets
-  const fetchAdSets = async (campaignId, token) => {
-    setAdSetsLoading(prev => ({ ...prev, [campaignId]: true }));
-    try {
-      const response = await fetch(`${API_URL}/api/ad-sets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAdSets(prev => ({ ...prev, [campaignId]: data.data || [] }));
-        fetchAllAdSetMetrics(campaignId, data.data || [], token);
-      }
-    } catch (err) {
-      console.error(`Error fetching ad sets for campaign ${campaignId}:`, err);
-    } finally {
-      setAdSetsLoading(prev => ({ ...prev, [campaignId]: false }));
-    }
-  };
-
-  const fetchAllAdSetMetrics = async (campaignId, adSetsArray, token) => {
-    const getRange = getDateRange(dateRange);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (adSet, timeoutMs = 10000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/adset-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adSetId: adSet.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
-    };
-
-    const promises = adSetsArray.map(async (adSet) => {
-      try {
-        const data = await fetchWithTimeout(adSet);
-        if (data.success) {
-          metricsMap[adSet.id] = data.data;
-        } else {
-          metricsMap[adSet.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-          };
-        }
-      } catch (err) {
-        metricsMap[adSet.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setAdSetMetrics(prev => ({ ...prev, ...metricsMap }));
-  };
-
-  // Stage 3C - Creatives are now fetched with ad sets, so we only need metrics
-  // fetchCreatives function removed - creatives come from adSet.creatives
-
-  const handleCampaignClick = (campaign) => {
-    if (expandedCampaign === campaign.id) {
-      setExpandedCampaign(null);
-      setExpandedCreatives(null);
-    } else {
-      setExpandedCampaign(campaign.id);
-      if (!adSets[campaign.id]) {
-        fetchAdSets(campaign.id, accessToken);
-      }
-    }
-  };
-
-  const handleAdSetClick = (adSetId) => {
-    console.log(`📢 handleAdSetClick triggered for adSetId: ${adSetId}`);
-    
-    if (expandedCreatives === adSetId) {
-      console.log(`   Collapsing creatives`);
-      setExpandedCreatives(null);
-    } else {
-      console.log(`   Expanding creatives`);
-      setExpandedCreatives(adSetId);
-      // Creatives are already loaded with ad sets, no extra fetch needed!
-    }
-  };
-
-  const handleDatePresetChange = (preset) => {
-    setDateRange(preset);
-    if (campaigns.length > 0) {
-      fetchAllCampaignMetrics(campaigns, accessToken, preset);
-    }
-  };
-
-  /* eslint-disable react-hooks/exhaustive-deps */
-  const fetchAdAccounts = React.useCallback(async (token) => {
-    setLoading(true);
-    setError('');
-    try {
-      const response = await fetch(`${API_URL}/api/ad-accounts`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAdAccounts(data.data || []);
-        setSuccess(`✅ Found ${data.count} ad accounts. Select one to view campaigns.`);
-      } else {
-        setError(`Failed: ${data.error}`);
-      }
-    } catch (err) {
-      setError(`Error: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const errorMsg = params.get('error');
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
     if (token) {
       setAccessToken(token);
       setLoggedIn(true);
-      setSuccess('✅ Logged in successfully! Select an ad account to view campaigns.');
-      fetchAdAccounts(token);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else if (errorMsg) {
-      setError(`OAuth error: ${errorMsg}`);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [fetchAdAccounts]);
-
-  const handleAccountChange = (e) => {
-    const accountId = e.target.value;
-    const account = adAccounts.find(a => a.id === accountId);
-    setSelectedAccount(accountId);
-    setSelectedAccountCurrency(account?.currency || 'USD');
-    setCampaignMetrics({});
-    setExpandedCampaign(null);
-    setExpandedCreatives(null);
-    setShowActiveOnly(true);
-    setSortBy('performance');
-    if (accessToken) {
-      fetchCampaigns(accountId, accessToken);
-    }
-  };
+  }, []);
 
   const handleLogin = async () => {
-    setLoggingIn(true);
     try {
+      setLoggingIn(true);
       const response = await fetch(`${API_URL}/api/auth/login-url`);
       const data = await response.json();
-      if (data.success) {
-        window.location.href = data.url;
+      if (data.success && data.loginUrl) {
+        window.location.href = data.loginUrl;
       }
     } catch (err) {
-      setError(`Error: ${err.message}`);
+      setError('Failed to initiate login');
+    } finally {
       setLoggingIn(false);
     }
   };
@@ -440,8 +526,8 @@ export default function App() {
   const handleLogout = () => {
     setLoggedIn(false);
     setAccessToken('');
-    setAdAccounts([]);
     setSelectedAccount('');
+    setAdAccounts([]);
     setSelectedAccountCurrency('USD');
     setCampaigns([]);
     setFilteredCampaigns([]);
@@ -457,792 +543,561 @@ export default function App() {
     setSortBy('performance');
   };
 
-  const formatCurrency = (value) => {
-    const num = parseFloat(value) || 0;
-    if (isNaN(num)) return `${getCurrencySymbol(selectedAccountCurrency)}0.00`;
-    return `${getCurrencySymbol(selectedAccountCurrency)}${num.toFixed(2)}`;
-  };
+  const fetchAdAccounts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/api/ad-accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken })
+      });
 
-  const formatNumber = (value) => {
-    const num = parseInt(value) || 0;
-    return num.toLocaleString();
-  };
-
-  const calculateSummary = () => {
-    let totalSpend = 0, totalImpressions = 0;
-    let totalPurchases = 0, totalPurchaseValue = 0;
-    let totalLeads = 0;
-    
-    filteredCampaigns.forEach(campaign => {
-      if (campaignMetrics[campaign.id]) {
-        const m = campaignMetrics[campaign.id];
-        totalSpend += parseFloat(m.spend) || 0;
-        totalImpressions += parseInt(m.impressions) || 0;
-        
-        if (isLeadGenCampaign(campaign.objective)) {
-          totalLeads += parseInt(m.leads) || 0;
-        } else {
-          totalPurchases += parseInt(m.purchases) || 0;
-          totalPurchaseValue += parseFloat(m.purchaseValue) || 0;
-        }
+      const data = await response.json();
+      if (data.success) {
+        setAdAccounts(data.data || []);
+        setSuccess('Ad accounts fetched');
       }
-    });
-
-    const avgROAS = totalSpend > 0 && totalPurchaseValue > 0 ? (totalPurchaseValue / totalSpend).toFixed(2) : 0;
-    const avgCPL = totalLeads > 0 && totalSpend > 0 ? (totalSpend / totalLeads).toFixed(2) : 0;
-    
-    return { totalSpend, totalImpressions, totalPurchases, totalLeads, totalPurchaseValue, avgROAS, avgCPL };
+    } catch (err) {
+      setError('Failed to fetch ad accounts');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (!loggedIn) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        padding: '20px'
-      }}>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-          }
-          @keyframes slideInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
-        <div style={{
-          background: 'white',
-          borderRadius: '16px',
-          padding: '48px',
-          maxWidth: '420px',
-          width: '100%',
-          boxShadow: '0 25px 50px rgba(0,0,0,0.2)',
-          textAlign: 'center',
-          animation: 'slideInUp 0.5s ease-out'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
-          <h1 style={{ fontSize: '28px', fontWeight: '700', color: '#1f2937', margin: '0 0 8px' }}>
-            Meta Performance
-          </h1>
-          <h2 style={{ fontSize: '18px', fontWeight: '600', color: '#667eea', margin: '0 0 24px' }}>
-            Engine
-          </h2>
-          <p style={{ fontSize: '14px', color: '#6b7280', margin: '0 0 32px', lineHeight: '1.6' }}>
-            Professional Meta Ads analytics for Spinta Digital
-          </p>
-          <button
-            onClick={handleLogin}
-            disabled={loggingIn}
-            style={{
-              width: '100%',
-              padding: '14px',
-              background: loggingIn ? '#999' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '700',
-              cursor: loggingIn ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              transition: 'all 0.3s'
-            }}
-          >
-            {loggingIn ? (
-              <>
-                <LoadingSpinner size="20px" color="white" />
-                Connecting to Meta...
-              </>
-            ) : (
-              <>🔐 Login with Meta</>
-            )}
-          </button>
-          {error && <p style={{ fontSize: '12px', color: '#dc2626', margin: '16px 0 0', background: '#fee2e2', padding: '8px', borderRadius: '6px' }}>{error}</p>}
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (loggedIn && accessToken) {
+      fetchAdAccounts();
+    }
+  }, [loggedIn, accessToken]);
 
-  const summary = calculateSummary();
+  const fetchCampaigns = async (accountId) => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await fetch(`${API_URL}/api/campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId, accessToken })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setCampaigns(data.data || []);
+        setFilteredCampaigns(data.data || []);
+        setSuccess(`${data.count} campaigns loaded`);
+      }
+    } catch (err) {
+      setError('Failed to fetch campaigns');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCampaignMetrics = async (campaignIds) => {
+    try {
+      setMetricsLoading(true);
+      const getRange = getDateRange(dateRange);
+      const { start, end } = getRange;
+
+      const metricsMap = {};
+      const promises = campaignIds.map(async (campaignId) => {
+        try {
+          const response = await fetch(`${API_URL}/api/campaign-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId, accessToken, dateStart: start, dateEnd: end })
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            metricsMap[campaignId] = data.data;
+          } else {
+            metricsMap[campaignId] = {
+              spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
+              purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+            };
+          }
+        } catch {
+          metricsMap[campaignId] = {
+            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
+            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+          };
+        }
+      });
+
+      await Promise.all(promises);
+      setCampaignMetrics(metricsMap);
+    } finally {
+      setMetricsLoading(false);
+    }
+  };
+
+  const fetchAdSets = async (campaignId) => {
+    try {
+      setAdSetsLoading(prev => ({ ...prev, [campaignId]: true }));
+      const response = await fetch(`${API_URL}/api/ad-sets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId, accessToken })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setAdSets(prev => ({ ...prev, [campaignId]: data.data || [] }));
+        fetchAdSetMetrics(data.data || [], campaignId);
+      }
+    } catch (err) {
+      console.error('Error fetching ad sets:', err);
+    } finally {
+      setAdSetsLoading(prev => ({ ...prev, [campaignId]: false }));
+    }
+  };
+
+  const fetchAdSetMetrics = async (adSetArray, campaignId) => {
+    try {
+      const getRange = getDateRange(dateRange);
+      const { start, end } = getRange;
+      const metricsMap = {};
+
+      const promises = adSetArray.map(async (adSet) => {
+        try {
+          const response = await fetch(`${API_URL}/api/adset-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adSetId: adSet.id, accessToken, dateStart: start, dateEnd: end })
+          });
+
+          const data = await response.json();
+          if (data.success) {
+            metricsMap[adSet.id] = data.data;
+          } else {
+            metricsMap[adSet.id] = {
+              spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
+              purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+            };
+          }
+        } catch {
+          metricsMap[adSet.id] = {
+            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
+            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+          };
+        }
+      });
+
+      await Promise.all(promises);
+      setAdSetMetrics(prev => ({ ...prev, ...metricsMap }));
+    } catch (err) {
+      console.error('Error fetching ad set metrics:', err);
+    }
+  };
+
+  const handleCampaignClick = (campaign) => {
+    if (expandedCampaign === campaign.id) {
+      setExpandedCampaign(null);
+      setExpandedCreatives(null);
+    } else {
+      setExpandedCampaign(campaign.id);
+      if (!adSets[campaign.id]) {
+        fetchAdSets(campaign.id);
+      }
+    }
+  };
+
+  const handleAdSetClick = (adSetId) => {
+    if (expandedCreatives === adSetId) {
+      setExpandedCreatives(null);
+    } else {
+      setExpandedCreatives(adSetId);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedAccount && campaigns.length > 0) {
+      const campaignIds = campaigns.map(c => c.id);
+      fetchCampaignMetrics(campaignIds);
+    }
+  }, [dateRange, selectedAccount]);
+
+  const handleDateRangeChange = (newRange) => {
+    setDateRange(newRange);
+  };
+
+  const handleAccountSelect = (accountId, currency) => {
+    setSelectedAccount(accountId);
+    setSelectedAccountCurrency(currency);
+    fetchCampaigns(accountId);
+  };
 
   return (
     <div style={{
-      background: '#f9fafb',
       minHeight: '100vh',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      padding: '24px 20px'
+      background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell"',
+      padding: '0'
     }}>
       <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
         @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
+          0% { background-position: -1000px 0; }
+          100% { background-position: 1000px 0; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
       `}</style>
-      <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '32px',
-          paddingBottom: '24px',
-          borderBottom: '2px solid #e5e7eb'
-        }}>
-          <div>
-            <h1 style={{ fontSize: '32px', fontWeight: '700', margin: 0, color: '#1f2937' }}>
-              📊 Meta Performance Engine
-            </h1>
-            <p style={{ fontSize: '14px', color: '#6b7280', margin: '8px 0 0' }}>
-              Stage 3A, 3B & 3C - Campaigns, Ad Sets & Creatives ✅
-            </p>
-          </div>
+
+      {/* Navigation */}
+      <nav style={{
+        background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        padding: '16px 24px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+      }}>
+        <h1 style={{ margin: '0', fontSize: '20px', fontWeight: '700' }}>📊 Meta Performance Engine</h1>
+        {loggedIn && (
           <button
             onClick={handleLogout}
             style={{
-              padding: '10px 20px',
-              background: '#ef4444',
+              background: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.3)',
               color: 'white',
-              border: 'none',
-              borderRadius: '8px',
+              padding: '8px 16px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '14px'
+              fontSize: '14px',
+              fontWeight: '600'
             }}
           >
             Logout
           </button>
-        </div>
-
-        {error && <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>{error}</div>}
-        {success && <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#166534', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '14px' }}>{success}</div>}
-
-        {/* Account Selector */}
-        <div style={{
-          background: 'white',
-          borderRadius: '12px',
-          padding: '20px',
-          border: '1px solid #e5e7eb',
-          marginBottom: '24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-        }}>
-          <label style={{ fontSize: '12px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700', display: 'block', marginBottom: '8px' }}>
-            📍 Select Ad Account
-          </label>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <select
-              value={selectedAccount}
-              onChange={handleAccountChange}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: '#f3f4f6',
-                border: '1px solid #d1d5db',
-                borderRadius: '8px',
-                color: '#1f2937',
-                fontSize: '14px',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
-            >
-              <option value="">Choose an ad account...</option>
-              {adAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} ({account.currency || 'USD'})
-                </option>
-              ))}
-            </select>
-            <div style={{
-              background: '#667eea',
-              color: 'white',
-              padding: '10px 16px',
-              borderRadius: '8px',
-              fontWeight: '700',
-              fontSize: '14px',
-              minWidth: '80px',
-              textAlign: 'center'
-            }}>
-              {getCurrencySymbol(selectedAccountCurrency)}
-            </div>
-          </div>
-        </div>
-
-        {/* Summary Cards */}
-        {campaigns.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '20px',
-            marginBottom: '32px'
-          }}>
-            {[
-              { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
-              { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
-              { label: summary.totalPurchases > 0 ? 'Total Purchases' : 'Total Leads', value: summary.totalPurchases > 0 ? formatNumber(summary.totalPurchases) : formatNumber(summary.totalLeads), color: '#10b981', icon: summary.totalPurchases > 0 ? '🛒' : '📞' },
-              { label: summary.totalPurchases > 0 ? 'Avg ROAS' : 'Avg CPL', value: summary.totalPurchases > 0 ? `${summary.avgROAS}x` : formatCurrency(summary.avgCPL), color: '#f59e0b', icon: summary.totalPurchases > 0 ? '⭐' : '💵' }
-            ].map((card, i) => (
-              <div key={i} style={{
-                background: 'white',
-                borderRadius: '12px',
-                padding: '24px',
-                border: '1px solid #e5e7eb',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#6b7280', textTransform: 'uppercase', fontWeight: '700' }}>{card.label}</p>
-                  <span style={{ fontSize: '28px' }}>{card.icon}</span>
-                </div>
-                {metricsLoading ? (
-                  <SkeletonLoader width="80%" height="32px" />
-                ) : (
-                  <p style={{ margin: 0, fontSize: '32px', fontWeight: '700', color: card.color }}>{card.value}</p>
-                )}
-              </div>
-            ))}
-          </div>
         )}
+      </nav>
 
-        {/* Loading Metrics */}
-        {metricsLoading && (
+      {/* Main Content */}
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
+        {error && (
           <div style={{
-            background: '#fef3c7',
-            border: '1px solid #fcd34d',
-            color: '#92400e',
-            padding: '12px 16px',
+            background: '#fee2e2',
+            border: '1px solid #fecaca',
+            color: '#b91c1c',
+            padding: '16px',
             borderRadius: '8px',
-            marginBottom: '20px',
-            fontSize: '14px',
-            textAlign: 'center'
+            marginBottom: '16px'
           }}>
-            ⏳ Optimizing metrics... (parallel fetching in progress)
+            {error}
           </div>
         )}
 
-        {/* Controls */}
-        {campaigns.length > 0 && (
+        {success && (
+          <div style={{
+            background: '#dcfce7',
+            border: '1px solid #bbf7d0',
+            color: '#166534',
+            padding: '16px',
+            borderRadius: '8px',
+            marginBottom: '16px'
+          }}>
+            {success}
+          </div>
+        )}
+
+        {!loggedIn ? (
           <div style={{
             background: 'white',
             borderRadius: '12px',
-            padding: '16px',
-            border: '1px solid #e5e7eb',
-            marginBottom: '24px',
-            display: 'flex',
-            gap: '12px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            padding: '60px 24px',
+            textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
           }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              marginBottom: '24px'
+            }}>
+              <h2 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 12px' }}>Welcome to Meta Performance Engine</h2>
+              <p style={{ fontSize: '16px', color: '#6b7280' }}>Connect your Meta Ads account to view campaign analytics</p>
+            </div>
             <button
-              onClick={() => setShowActiveOnly(!showActiveOnly)}
+              onClick={handleLogin}
+              disabled={loggingIn}
               style={{
-                padding: '8px 16px',
-                background: showActiveOnly ? '#667eea' : '#f3f4f6',
-                color: showActiveOnly ? 'white' : '#1f2937',
+                background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
                 border: 'none',
-                borderRadius: '6px',
+                padding: '12px 32px',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '700',
                 cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: '600'
+                transition: 'all 0.3s'
               }}
             >
-              {showActiveOnly ? '✅ Active Only' : '📋 Show All'}
+              {loggingIn ? 'Connecting...' : 'Connect with Meta'}
             </button>
-
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{
-              padding: '8px 12px',
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              color: '#1f2937',
-              cursor: 'pointer',
-              fontSize: '13px',
-              fontWeight: '500'
-            }}>
-              <option value="performance">Sort: Performance</option>
-              <option value="spend">Sort: Spend</option>
-              <option value="impressions">Sort: Impressions</option>
-              <option value="name">Sort: Name</option>
-            </select>
-
-            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-              {['today', 'yesterday', 'mtd', 'qtd', '7', '30', '90'].map(preset => (
-                <button key={preset} onClick={() => handleDatePresetChange(preset)} style={{
-                  padding: '6px 12px',
-                  background: dateRange === preset ? '#667eea' : '#f3f4f6',
-                  border: 'none',
-                  borderRadius: '6px',
-                  color: dateRange === preset ? 'white' : '#1f2937',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}>
-                  {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'mtd' ? 'MTD' : preset === 'qtd' ? 'QTD' : preset + 'D'}
-                </button>
-              ))}
-            </div>
           </div>
-        )}
+        ) : (
+          <div>
+            {/* Account & Date Selector */}
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '20px',
+              marginBottom: '24px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              display: 'flex',
+              gap: '16px',
+              flexWrap: 'wrap',
+              alignItems: 'center'
+            }}>
+              <select
+                value={selectedAccount}
+                onChange={(e) => {
+                  const selected = adAccounts.find(a => a.id === e.target.value);
+                  if (selected) handleAccountSelect(selected.id, selected.currency);
+                }}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  fontSize: '14px',
+                  flex: 1,
+                  minWidth: '200px'
+                }}
+              >
+                <option value="">Select Ad Account</option>
+                {adAccounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.name} ({account.currency})
+                  </option>
+                ))}
+              </select>
 
-        {/* Campaigns List with Ad Sets and Creatives */}
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px', color: '#1f2937' }}>
-            🎯 Campaigns ({filteredCampaigns.length} of {campaigns.length})
-          </h2>
-          {filteredCampaigns.length > 0 ? (
-            <div style={{ display: 'grid', gap: '16px' }}>
-              {filteredCampaigns.map((campaign) => {
-                const metrics = campaignMetrics[campaign.id] || {
-                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-                };
-                const isLeadGen = isLeadGenCampaign(campaign.objective);
-                const performanceColor = getPerformanceColor(campaign.objective, metrics);
-                const performanceLabel = getPerformanceLabel(campaign.objective, metrics);
-                const campaignAdSets = adSets[campaign.id] || [];
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {['today', 'yesterday', 'mtd', 'qtd', '7', '30', '90'].map(range => (
+                  <button
+                    key={range}
+                    onClick={() => handleDateRangeChange(range)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: dateRange === range ? '2px solid #667eea' : '1px solid #e5e7eb',
+                      background: dateRange === range ? '#667eea' : 'white',
+                      color: dateRange === range ? 'white' : '#6b7280',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {range === 'today' ? 'Today' : range === 'yesterday' ? 'Yesterday' : range === 'mtd' ? 'MTD' : range === 'qtd' ? 'QTD' : `${range}D`}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                return (
-                  <div key={campaign.id}>
-                    {/* Campaign Card */}
+            {/* Campaigns List */}
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <LoadingSpinner />
+              </div>
+            ) : campaigns.length > 0 ? (
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {filteredCampaigns.map(campaign => {
+                  const isLeadGen = campaign.objective && (campaign.objective.includes('LEAD') || campaign.objective.includes('lead'));
+                  const metric = campaignMetrics[campaign.id] || {};
+                  const isExpanded = expandedCampaign === campaign.id;
+                  const campaignAdSets = adSets[campaign.id] || [];
+
+                  return (
                     <div
-                      onClick={() => handleCampaignClick(campaign)}
+                      key={campaign.id}
                       style={{
                         background: 'white',
-                        border: expandedCampaign === campaign.id ? '2px solid #667eea' : '1px solid #e5e7eb',
                         borderRadius: '12px',
-                        padding: '20px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        transition: 'all 0.3s',
-                        boxShadow: expandedCampaign === campaign.id ? '0 4px 12px rgba(102, 126, 234, 0.1)' : '0 1px 3px rgba(0,0,0,0.1)',
-                        backgroundColor: expandedCampaign === campaign.id ? '#f0f4ff' : 'white'
+                        overflow: 'hidden',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        transition: 'all 0.3s'
                       }}
                     >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
+                      <div
+                        onClick={() => handleCampaignClick(campaign)}
+                        style={{
+                          padding: '20px',
+                          cursor: 'pointer',
+                          background: isExpanded ? '#f9fafb' : 'white',
+                          borderBottom: isExpanded ? '1px solid #e5e7eb' : 'none',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <div>
+                          <h3 style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: '700', color: '#1f2937' }}>
                             {campaign.name}
                           </h3>
-                          <span style={{
-                            display: 'inline-block',
-                            padding: '4px 10px',
-                            background: campaign.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
-                            border: campaign.status === 'ACTIVE' ? '1px solid #6ee7b7' : '1px solid #d1d5db',
-                            borderRadius: '6px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            color: campaign.status === 'ACTIVE' ? '#047857' : '#6b7280'
-                          }}>
-                            {campaign.status}
-                          </span>
+                          <p style={{ margin: '0', fontSize: '12px', color: '#6b7280' }}>
+                            {campaign.objective} • {campaign.status}
+                          </p>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '16px', marginBottom: '8px' }}>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                          gap: '16px',
+                          textAlign: 'right'
+                        }}>
                           <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Spend</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#3b82f6' }}>{formatCurrency(metrics.spend)}</p>}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>Impressions</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#8b5cf6' }}>{formatNumber(metrics.impressions)}</p>}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'Leads' : 'Purchases'}</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#10b981' }}>{isLeadGen ? formatNumber(metrics.leads) : formatNumber(metrics.purchases)}</p>}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{isLeadGen ? 'CPL' : 'ROAS'}</p>
-                            {metricsLoading ? <SkeletonLoader width="80%" height="24px" /> : <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: performanceColor }}>{isLeadGen ? formatCurrency(metrics.cpl) : `${(parseFloat(metrics.roas) || 0).toFixed(2)}x`}</p>}
-                          </div>
-                        </div>
-
-                        <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#9ca3af' }}>
-                          {campaign.objective} • {performanceLabel} • 📢 {campaignAdSets.length} Ad Sets
-                        </p>
-                      </div>
-
-                      <span style={{
-                        fontSize: '20px',
-                        color: '#667eea',
-                        transform: expandedCampaign === campaign.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.3s',
-                        marginLeft: '16px'
-                      }}>
-                        ▼
-                      </span>
-                    </div>
-
-                    {/* Expanded Campaign - Detailed Metrics + Ad Sets */}
-                    {expandedCampaign === campaign.id && (
-                      <div style={{
-                        background: '#f9fafb',
-                        padding: '20px',
-                        borderRadius: '0 0 12px 12px',
-                        borderLeft: '2px solid #667eea',
-                        borderRight: '2px solid #667eea',
-                        borderBottom: '2px solid #667eea',
-                        marginTop: '-1px'
-                      }}>
-                        {/* Detailed Metrics Grid */}
-                        <div style={{ marginBottom: '24px' }}>
-                          <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>📊 Detailed Metrics</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                            {isLeadGen && [
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Leads', value: formatNumber(metrics.leads), color: '#10b981' },
-                              { label: 'CPL', value: formatCurrency(metrics.cpl), color: performanceColor, highlight: true }
-                            ]?.map((item, i) => (
-                              <div key={i} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                            {!isLeadGen && [
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
-                              { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
-                              { label: 'ROAS', value: (parseFloat(metrics.roas) || 0).toFixed(2) + 'x', color: performanceColor, highlight: true }
-                            ]?.map((item, i) => (
-                              <div key={i} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Ad Sets Section - Stage 3B */}
-                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
-                          <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>
-                            📢 Ad Sets ({campaignAdSets.length})
-                          </h4>
-                          {adSetsLoading[campaign.id] ? (
-                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>Loading ad sets...</p>
-                          ) : campaignAdSets.length > 0 ? (
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                              {campaignAdSets.map((adSet) => {
-                                const adSetMetric = adSetMetrics[adSet.id] || {
-                                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-                                };
-                                const adSetPerformanceColor = getPerformanceColor(campaign.objective, adSetMetric);
-
-                                return (
-                                  <div key={adSet.id}>
-                                    <div
-                                      onClick={() => handleAdSetClick(adSet.id)}
-                                      style={{
-                                        background: 'white',
-                                        border: expandedCreatives === adSet.id ? '2px solid #10b981' : '1px solid #e5e7eb',
-                                        borderRadius: '8px',
-                                        padding: '16px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        transition: 'all 0.3s'
-                                      }}
-                                    >
-                                      <div style={{ flex: 1 }}>
-                                        <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1f2937', marginBottom: '8px' }}>
-                                          {adSet.name}
-                                        </p>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', fontSize: '12px' }}>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>Spend:</span> <span style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(adSetMetric.spend)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>Impressions:</span> <span style={{ fontWeight: '600', color: '#8b5cf6' }}>{formatNumber(adSetMetric.impressions)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Purchases'}:</span> <span style={{ fontWeight: '600', color: '#10b981' }}>{isLeadGen ? formatNumber(adSetMetric.leads) : formatNumber(adSetMetric.purchases)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span> <span style={{ fontWeight: '600', color: adSetPerformanceColor }}>{isLeadGen ? formatCurrency(adSetMetric.cpl) : `${(parseFloat(adSetMetric.roas) || 0).toFixed(2)}x`}</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <span style={{
-                                        fontSize: '16px',
-                                        color: '#10b981',
-                                        transform: expandedCreatives === adSet.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                                        transition: 'transform 0.3s',
-                                        marginLeft: '12px'
-                                      }}>
-                                        ▼
-                                      </span>
-                                    </div>
-
-                                    {/* Expanded Ad Set - Creatives Section - Stage 3C */}
-                                    {expandedCreatives === adSet.id && (
-                                      <div style={{
-                                        background: 'white',
-                                        padding: '16px',
-                                        borderRadius: '0 0 8px 8px',
-                                        borderLeft: '2px solid #10b981',
-                                        borderRight: '2px solid #10b981',
-                                        borderBottom: '2px solid #10b981',
-                                        marginTop: '-1px',
-                                        marginBottom: '12px'
-                                      }}>
-                                        {/* Ad Set Full Metrics */}
-                                        <div style={{ marginBottom: '16px' }}>
-                                          <h5 style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>Ad Set Performance</h5>
-                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-                                            {isLeadGen && [
-                                              { label: 'Spend', value: formatCurrency(adSetMetric.spend), color: '#3b82f6' },
-                                              { label: 'Impressions', value: formatNumber(adSetMetric.impressions), color: '#8b5cf6' },
-                                              { label: 'Clicks', value: formatNumber(adSetMetric.clicks), color: '#06b6d4' },
-                                              { label: 'CTR', value: (parseFloat(adSetMetric.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                                              { label: 'CPC', value: formatCurrency(adSetMetric.cpc), color: '#ec4899' },
-                                              { label: 'Leads', value: formatNumber(adSetMetric.leads), color: '#10b981' },
-                                              { label: 'CPL', value: formatCurrency(adSetMetric.cpl), color: adSetPerformanceColor, highlight: true }
-                                            ]?.map((item, i) => (
-                                              <div key={i} style={{
-                                                background: '#f9fafb',
-                                                padding: '12px',
-                                                borderRadius: '6px',
-                                                border: item.highlight ? `2px solid ${adSetPerformanceColor}` : '1px solid #e5e7eb',
-                                                fontSize: '11px'
-                                              }}>
-                                                <p style={{ margin: 0, color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>{item.label}</p>
-                                                <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                                              </div>
-                                            ))}
-                                            {!isLeadGen && [
-                                              { label: 'Spend', value: formatCurrency(adSetMetric.spend), color: '#3b82f6' },
-                                              { label: 'Impressions', value: formatNumber(adSetMetric.impressions), color: '#8b5cf6' },
-                                              { label: 'Clicks', value: formatNumber(adSetMetric.clicks), color: '#06b6d4' },
-                                              { label: 'CTR', value: (parseFloat(adSetMetric.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                                              { label: 'CPC', value: formatCurrency(adSetMetric.cpc), color: '#ec4899' },
-                                              { label: 'Purchases', value: formatNumber(adSetMetric.purchases), color: '#10b981' },
-                                              { label: 'Purchase Value', value: formatCurrency(adSetMetric.purchaseValue), color: '#10b981' },
-                                              { label: 'ROAS', value: (parseFloat(adSetMetric.roas) || 0).toFixed(2) + 'x', color: adSetPerformanceColor, highlight: true }
-                                            ]?.map((item, i) => (
-                                              <div key={i} style={{
-                                                background: '#f9fafb',
-                                                padding: '12px',
-                                                borderRadius: '6px',
-                                                border: item.highlight ? `2px solid ${adSetPerformanceColor}` : '1px solid #e5e7eb',
-                                                fontSize: '11px'
-                                              }}>
-                                                <p style={{ margin: 0, color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>{item.label}</p>
-                                                <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-
-                                        {/* Creatives Section */}
-                                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
-                                          <h5 style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-                                            🎬 Creatives ({(adSet.creatives || []).length})
-                                          </h5>
-                                          {(adSet.creatives || []).length > 0 ? (
-                                            <div style={{ display: 'grid', gap: '12px' }}>
-                                              {(adSet.creatives || []).map((creative) => {
-                                                const creativeMetric = creativeMetrics[creative.id] || {
-                                                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                                                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
-                                                };
-                                                const creativePerformanceColor = getPerformanceColor(campaign.objective, creativeMetric);
-
-                                                return (
-                                                  <div key={creative.id} style={{
-                                                    background: '#f9fafb',
-                                                    padding: '16px',
-                                                    borderRadius: '8px',
-                                                    border: '1px solid #e5e7eb',
-                                                    display: 'grid',
-                                                    gridTemplateColumns: '1fr',
-                                                    gap: '12px'
-                                                  }}>
-                                                    {/* Creative Header */}
-                                                    <div>
-                                                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                                                        <span style={{ fontSize: '20px' }}>{creative.creativeType === 'VIDEO' ? '🎥' : '🖼️'}</span>
-                                                        <div style={{ flex: 1 }}>
-                                                          <p style={{ margin: '0', fontSize: '13px', fontWeight: '700', color: '#1f2937' }}>
-                                                            {creative.name || 'Creative'}
-                                                          </p>
-                                                          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                                                            <span style={{
-                                                              display: 'inline-block',
-                                                              padding: '3px 8px',
-                                                              background: '#f3f4f6',
-                                                              border: '1px solid #d1d5db',
-                                                              borderRadius: '3px',
-                                                              fontSize: '10px',
-                                                              fontWeight: '600',
-                                                              color: '#6b7280'
-                                                            }}>
-                                                              {creative.creativeType}
-                                                            </span>
-                                                            <span style={{
-                                                              display: 'inline-block',
-                                                              padding: '3px 8px',
-                                                              background: creative.status === 'ACTIVE' ? '#d1fae5' : '#f3f4f6',
-                                                              border: creative.status === 'ACTIVE' ? '1px solid #6ee7b7' : '1px solid #d1d5db',
-                                                              borderRadius: '3px',
-                                                              fontSize: '10px',
-                                                              fontWeight: '600',
-                                                              color: creative.status === 'ACTIVE' ? '#047857' : '#6b7280'
-                                                            }}>
-                                                              {creative.status}
-                                                            </span>
-                                                          </div>
-                                                        </div>
-                                                      </div>
-                                                    </div>
-
-                                                    {/* Ad Copy */}
-                                                    {creative.adCopy && creative.adCopy !== 'No copy' && (
-                                                      <div style={{
-                                                        background: '#fff',
-                                                        padding: '10px',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #e5e7eb',
-                                                        fontSize: '12px',
-                                                        lineHeight: '1.5',
-                                                        color: '#374151'
-                                                      }}>
-                                                        <strong>Copy:</strong> {creative.adCopy.substring(0, 200)}{creative.adCopy.length > 200 ? '...' : ''}
-                                                      </div>
-                                                    )}
-
-                                                    {/* Headline */}
-                                                    {creative.headline && (
-                                                      <div style={{
-                                                        background: '#f0f4ff',
-                                                        padding: '10px',
-                                                        borderRadius: '4px',
-                                                        border: '1px solid #c7d2fe',
-                                                        borderLeft: '3px solid #667eea',
-                                                        fontSize: '12px',
-                                                        color: '#4f46e5'
-                                                      }}>
-                                                        <strong>Headline:</strong> {creative.headline}
-                                                      </div>
-                                                    )}
-
-                                                    {/* Creative Metrics */}
-                                                    <div style={{
-                                                      display: 'grid',
-                                                      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-                                                      gap: '8px',
-                                                      fontSize: '11px',
-                                                      paddingTop: '8px',
-                                                      borderTop: '1px solid #e5e7eb'
-                                                    }}>
-                                                      <div>
-                                                        <span style={{ color: '#6b7280' }}>Spend:</span>
-                                                        <div style={{ fontWeight: '600', color: '#3b82f6', fontSize: '12px', marginTop: '2px' }}>
-                                                          {formatCurrency(creativeMetric.spend)}
-                                                        </div>
-                                                      </div>
-                                                      <div>
-                                                        <span style={{ color: '#6b7280' }}>Impressions:</span>
-                                                        <div style={{ fontWeight: '600', color: '#8b5cf6', fontSize: '12px', marginTop: '2px' }}>
-                                                          {formatNumber(creativeMetric.impressions)}
-                                                        </div>
-                                                      </div>
-                                                      <div>
-                                                        <span style={{ color: '#6b7280' }}>Clicks:</span>
-                                                        <div style={{ fontWeight: '600', color: '#06b6d4', fontSize: '12px', marginTop: '2px' }}>
-                                                          {formatNumber(creativeMetric.clicks)}
-                                                        </div>
-                                                      </div>
-                                                      <div>
-                                                        <span style={{ color: '#6b7280' }}>CTR:</span>
-                                                        <div style={{ fontWeight: '600', color: '#f59e0b', fontSize: '12px', marginTop: '2px' }}>
-                                                          {(parseFloat(creativeMetric.ctr) || 0).toFixed(2)}%
-                                                        </div>
-                                                      </div>
-                                                      <div>
-                                                        <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Conv'}:</span>
-                                                        <div style={{ fontWeight: '600', color: '#10b981', fontSize: '12px', marginTop: '2px' }}>
-                                                          {isLeadGen ? formatNumber(creativeMetric.leads) : formatNumber(creativeMetric.purchases)}
-                                                        </div>
-                                                      </div>
-                                                      <div>
-                                                        <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span>
-                                                        <div style={{ fontWeight: '600', color: creativePerformanceColor, fontSize: '12px', marginTop: '2px' }}>
-                                                          {isLeadGen ? formatCurrency(creativeMetric.cpl) : `${(parseFloat(creativeMetric.roas) || 0).toFixed(2)}x`}
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          ) : (
-                                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '12px', fontSize: '12px' }}>No creatives found</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                            <div style={{ fontSize: '12px', color: '#6b7280' }}>Spend</div>
+                            <div style={{ fontSize: '18px', fontWeight: '700', color: '#1f2937' }}>
+                              {formatCurrency(metric.spend || 0)}
                             </div>
-                          ) : (
-                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>No ad sets found</p>
-                          )}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280' }}>Impressions</div>
+                            <div style={{ fontSize: '18px', fontWeight: '700', color: '#1f2937' }}>
+                              {formatNumber(metric.impressions || 0)}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '12px', color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Conversions'}</div>
+                            <div style={{ fontSize: '18px', fontWeight: '700', color: getPerformanceColor(campaign.objective, metric) }}>
+                              {isLeadGen ? metric.leads || 0 : metric.purchases || 0}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No active campaigns found.'}
-            </p>
-          )}
-        </div>
 
-        <p style={{
-          fontSize: '12px',
-          color: '#9ca3af',
-          textAlign: 'center',
-          margin: '40px 0 0'
-        }}>
-          🚀 Stage 3A ✅ | Stage 3B ✅ | Stage 3C ✅ | 🔐 Securely connected | Creative previews enabled
-        </p>
+                      {/* Expanded Campaign Content */}
+                      {isExpanded && (
+                        <div style={{ padding: '24px', borderTop: '1px solid #e5e7eb' }}>
+                          {/* Campaign Metrics Grid */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                            gap: '16px',
+                            marginBottom: '24px'
+                          }}>
+                            {[
+                              { label: 'Spend', value: formatCurrency(metric.spend || 0), color: '#3b82f6' },
+                              { label: 'Impressions', value: formatNumber(metric.impressions || 0), color: '#8b5cf6' },
+                              { label: 'Clicks', value: formatNumber(metric.clicks || 0), color: '#06b6d4' },
+                              { label: 'CTR', value: `${(metric.ctr || 0).toFixed(2)}%`, color: '#f59e0b' },
+                              { label: 'CPC', value: formatCurrency(metric.cpc || 0), color: '#3b82f6' },
+                              { label: isLeadGen ? 'Leads' : 'Conversions', value: formatNumber(isLeadGen ? metric.leads || 0 : metric.purchases || 0), color: '#10b981' },
+                              { label: isLeadGen ? 'CPL' : 'ROAS', value: isLeadGen ? formatCurrency(metric.cpl || 0) : `${(metric.roas || 0).toFixed(2)}x`, color: '#ef4444' }
+                            ].map((item, idx) => (
+                              <div key={idx} style={{
+                                background: '#f9fafb',
+                                padding: '16px',
+                                borderRadius: '8px',
+                                border: '1px solid #e5e7eb'
+                              }}>
+                                <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+                                  {item.label}
+                                </div>
+                                <div style={{ fontSize: '18px', fontWeight: '700', color: item.color }}>
+                                  {item.value}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Ad Sets */}
+                          <div style={{ borderTop: '2px solid #e5e7eb', paddingTop: '24px' }}>
+                            <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>
+                              📍 Ad Sets ({campaignAdSets.length})
+                            </h4>
+
+                            {adSetsLoading[campaign.id] ? (
+                              <SkeletonLoader height="100px" />
+                            ) : campaignAdSets.length > 0 ? (
+                              <div style={{ display: 'grid', gap: '16px' }}>
+                                {campaignAdSets.map(adSet => {
+                                  const adSetMetric = adSetMetrics[adSet.id] || {};
+                                  const isAdSetExpanded = expandedCreatives === adSet.id;
+
+                                  return (
+                                    <div key={adSet.id} style={{
+                                      background: '#f9fafb',
+                                      border: '1px solid #e5e7eb',
+                                      borderRadius: '8px',
+                                      overflow: 'hidden'
+                                    }}>
+                                      <div
+                                        onClick={() => handleAdSetClick(adSet.id)}
+                                        style={{
+                                          padding: '16px',
+                                          cursor: 'pointer',
+                                          display: 'flex',
+                                          justifyContent: 'space-between',
+                                          alignItems: 'center',
+                                          background: isAdSetExpanded ? '#fff' : '#f9fafb'
+                                        }}
+                                      >
+                                        <div>
+                                          <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '700', color: '#1f2937' }}>
+                                            {adSet.name}
+                                          </p>
+                                          <p style={{ margin: '0', fontSize: '11px', color: '#6b7280' }}>
+                                            Budget: {adSet.daily_budget ? `$${adSet.daily_budget}/day` : adSet.lifetime_budget ? `$${adSet.lifetime_budget} lifetime` : 'N/A'}
+                                          </p>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>
+                                            {formatCurrency(adSetMetric.spend || 0)}
+                                          </div>
+                                          <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                                            {formatNumber(adSetMetric.impressions || 0)} imp
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Creatives Section - Using New Component */}
+                                      {isAdSetExpanded && (
+                                        <div style={{ padding: '24px', borderTop: '1px solid #e5e7eb', background: '#fff' }}>
+                                          <CreativeSection
+                                            adSet={adSet}
+                                            campaign={campaign}
+                                            isLeadGen={isLeadGen}
+                                            creativeMetrics={creativeMetrics}
+                                            formatCurrency={formatCurrency}
+                                            formatNumber={formatNumber}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>No ad sets found</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '40px',
+                textAlign: 'center',
+                color: '#9ca3af'
+              }}>
+                Select an account to view campaigns
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
