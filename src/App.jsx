@@ -560,21 +560,14 @@ export default function App() {
 
   const handleAdSetClick = (adSetId) => {
     console.log(`📢 handleAdSetClick triggered for adSetId: ${adSetId}`);
-    console.log(`   expandedCreatives currently: ${expandedCreatives}`);
     
     if (expandedCreatives === adSetId) {
-      console.log(`   Collapsing creatives for this ad set`);
+      console.log(`   Collapsing creatives`);
       setExpandedCreatives(null);
     } else {
-      console.log(`   Expanding creatives for this ad set`);
+      console.log(`   Expanding creatives`);
       setExpandedCreatives(adSetId);
-      console.log(`   Checking if creatives already loaded: ${!!adCreatives[adSetId]}`);
-      if (!adCreatives[adSetId]) {
-        console.log(`   ✅ Calling fetchCreatives...`);
-        fetchCreatives(adSetId, accessToken);
-      } else {
-        console.log(`   ✅ Creatives already loaded, skipping fetch`);
-      }
+      // Creatives are already loaded with ad sets, no extra fetch needed!
     }
   };
 
@@ -1288,13 +1281,11 @@ export default function App() {
                                         {/* Creatives Section */}
                                         <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
                                           <h5 style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-                                            🎬 Creatives ({(adCreatives[adSet.id] || []).length})
+                                            🎬 Creatives ({(adSet.creatives || []).length})
                                           </h5>
-                                          {creativesLoading[adSet.id] ? (
-                                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '12px', fontSize: '12px' }}>Loading creatives...</p>
-                                          ) : (adCreatives[adSet.id] || []).length > 0 ? (
+                                          {(adSet.creatives || []).length > 0 ? (
                                             <div style={{ display: 'grid', gap: '12px' }}>
-                                              {(adCreatives[adSet.id] || []).map((creative) => {
+                                              {(adSet.creatives || []).map((creative) => {
                                                 const creativeMetric = creativeMetrics[creative.id] || {
                                                   spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
                                                   purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
