@@ -463,58 +463,6 @@ export default function App() {
   // Stage 3C - Creatives are now fetched with ad sets, so we only need metrics
   // fetchCreatives function removed - creatives come from adSet.creatives
 
-  const fetchAllCreativeMetrics = async (adSetId, creativesArray, token) => {
-    const getRange = getDateRange(dateRange);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (creative, timeoutMs = 10000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/creative-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adId: creative.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
-    };
-
-    const promises = creativesArray.map(async (creative) => {
-      try {
-        const data = await fetchWithTimeout(creative);
-        if (data.success) {
-          metricsMap[creative.id] = data.data;
-        } else {
-          metricsMap[creative.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
-          };
-        }
-      } catch (err) {
-        metricsMap[creative.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setCreativeMetrics(prev => ({ ...prev, ...metricsMap }));
-  };
-
   const handleCampaignClick = (campaign) => {
     if (expandedCampaign === campaign.id) {
       setExpandedCampaign(null);
