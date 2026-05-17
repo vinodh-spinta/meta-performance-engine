@@ -184,7 +184,6 @@ export default function App() {
   const [adSetsLoading, setAdSetsLoading] = useState({});
   
   // Stage 3C - Creatives (pulled with ad sets, metrics only)
-  const [expandedCreatives, setExpandedCreatives] = useState(null);
   const [creativeMetrics, setCreativeMetrics] = useState({});
 
   const getCurrencySymbol = (currency) => {
