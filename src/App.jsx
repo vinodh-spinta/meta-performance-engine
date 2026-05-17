@@ -29,7 +29,6 @@ const LoadingSpinner = ({ size = '40px', color = '#667eea' }) => (
 
 // Creative Card Component - Shows ad copy and creative info
 const CreativeCard = ({ creative, isLeadGen, performanceColor }) => {
-  const creativeData = creative.creativeData || creative;
   const adCopy = creative.adCopy || 'No copy available';
   const headline = creative.headline || '';
   const creativeType = creative.creativeType || 'UNKNOWN';
