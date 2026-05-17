@@ -576,7 +576,7 @@ export default function App() {
       const response = await fetch(`${API_URL}/api/campaigns`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accountId, accessToken })
+        body: JSON.stringify({ adAccountId: accountId, accessToken })
       });
 
       const data = await response.json();
@@ -584,9 +584,11 @@ export default function App() {
         setCampaigns(data.data || []);
         setFilteredCampaigns(data.data || []);
         setSuccess(`${data.count} campaigns loaded`);
+      } else {
+        setError(data.error || 'Failed to fetch campaigns');
       }
     } catch (err) {
-      setError('Failed to fetch campaigns');
+      setError('Failed to fetch campaigns: ' + err.message);
     } finally {
       setLoading(false);
     }
