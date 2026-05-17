@@ -539,8 +539,6 @@ export default function App() {
     setCreativeMetrics({});
     setError('');
     setSuccess('');
-    setShowActiveOnly(true);
-    setSortBy('performance');
   };
 
   const fetchAdAccounts = async () => {
@@ -596,7 +594,6 @@ export default function App() {
 
   const fetchCampaignMetrics = async (campaignIds) => {
     try {
-      setMetricsLoading(true);
       const getRange = getDateRange(dateRange);
       const { start, end } = getRange;
 
@@ -628,8 +625,8 @@ export default function App() {
 
       await Promise.all(promises);
       setCampaignMetrics(metricsMap);
-    } finally {
-      setMetricsLoading(false);
+    } catch (err) {
+      console.error('Error fetching metrics:', err);
     }
   };
 
