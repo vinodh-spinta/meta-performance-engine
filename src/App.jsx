@@ -411,10 +411,7 @@ export default function App() {
   const [success, setSuccess] = useState('');
   const [expandedCampaign, setExpandedCampaign] = useState(null);
   const [campaignMetrics, setCampaignMetrics] = useState({});
-  const [metricsLoading, setMetricsLoading] = useState(false);
   const [dateRange, setDateRange] = useState('30');
-  const [showActiveOnly, setShowActiveOnly] = useState(true);
-  const [sortBy, setSortBy] = useState('performance');
   const [loggingIn, setLoggingIn] = useState(false);
 
   // Stage 3B - Ad Sets
@@ -488,6 +485,9 @@ export default function App() {
         break;
       case '90':
         startDate.setDate(endDate.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(endDate.getDate() - 30);
         break;
     }
 
@@ -564,6 +564,7 @@ export default function App() {
     }
   };
 
+  /* eslint-disable-next-line react-hooks/exhaustive-deps */
   useEffect(() => {
     if (loggedIn && accessToken) {
       fetchAdAccounts();
@@ -711,6 +712,7 @@ export default function App() {
     }
   };
 
+  /* eslint-disable-next-line react-hooks/exhaustive-deps */
   useEffect(() => {
     if (selectedAccount && campaigns.length > 0) {
       const campaignIds = campaigns.map(c => c.id);
