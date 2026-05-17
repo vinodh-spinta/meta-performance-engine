@@ -1280,13 +1280,13 @@ export default function App() {
                                         {/* Creatives Section */}
                                         <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
                                           <h5 style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#1f2937' }}>
-                                            🎬 Creatives ({adSetCreatives.length})
+                                            🎬 Creatives ({(adCreatives[adSet.id] || []).length})
                                           </h5>
                                           {creativesLoading[adSet.id] ? (
                                             <p style={{ color: '#9ca3af', textAlign: 'center', padding: '12px', fontSize: '12px' }}>Loading creatives...</p>
-                                          ) : adSetCreatives.length > 0 ? (
+                                          ) : (adCreatives[adSet.id] || []).length > 0 ? (
                                             <div style={{ display: 'grid', gap: '12px' }}>
-                                              {adSetCreatives.map((creative) => {
+                                              {(adCreatives[adSet.id] || []).map((creative) => {
                                                 const creativeMetric = creativeMetrics[creative.id] || {
                                                   spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
                                                   purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0, frequency: 0
