@@ -42,15 +42,12 @@ export default function App() {
   const [campaignMetrics, setCampaignMetrics] = useState({});
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [dateRange, setDateRange] = useState('30');
+  const [customDateStart, setCustomDateStart] = useState('');
+  const [customDateEnd, setCustomDateEnd] = useState('');
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [sortBy, setSortBy] = useState('performance');
   const [loggingIn, setLoggingIn] = useState(false);
-  
-  // Stage 3B - Ad Sets
-  const [expandedAdSets, setExpandedAdSets] = useState(null);
-  const [adSets, setAdSets] = useState({});
-  const [adSetMetrics, setAdSetMetrics] = useState({});
-  const [adSetsLoading, setAdSetsLoading] = useState({});
 
   const getCurrencySymbol = (currency) => {
     const symbols = {
@@ -60,6 +57,7 @@ export default function App() {
     return symbols[currency] || currency;
   };
 
+  // Detect campaign type
   const isLeadGenCampaign = (objective) => {
     const leadObjectives = ['LEAD_GENERATION', 'MESSAGES', 'OUTCOME_LEADS'];
     return leadObjectives.includes(objective);
@@ -70,6 +68,7 @@ export default function App() {
     return ecommerceObjectives.includes(objective);
   };
 
+  // Get performance color and label based on campaign type
   const getPerformanceColor = (objective, metrics) => {
     if (isLeadGenCampaign(objective)) {
       const cpl = parseFloat(metrics?.cpl) || 0;
@@ -94,11 +93,11 @@ export default function App() {
     if (isLeadGenCampaign(objective)) {
       const cpl = parseFloat(metrics?.cpl) || 0;
       if (cpl === 0) return '📊 No Data';
-      if (cpl <= 5) return '🌟 Excellent';
-      if (cpl <= 10) return '✨ Good';
-      if (cpl <= 25) return '👍 Fair';
-      if (cpl <= 50) return '⚠️ High';
-      return '❌ Very High';
+      if (cpl <= 5) return '🌟 Excellent CPL';
+      if (cpl <= 10) return '✨ Good CPL';
+      if (cpl <= 25) return '👍 Fair CPL';
+      if (cpl <= 50) return '⚠️ High CPL';
+      return '❌ Very High CPL';
     } else {
       const roas = parseFloat(metrics?.roas) || 0;
       if (roas >= 3) return '🌟 Exceptional';
@@ -212,6 +211,7 @@ export default function App() {
 
     const metricsMap = {};
 
+    // Fetch all campaigns in parallel (faster) with timeout
     const fetchWithTimeout = (campaign, timeoutMs = 15000) => {
       return Promise.race([
         fetch(`${API_URL}/api/campaign-insights`, {
@@ -229,20 +229,45 @@ export default function App() {
       try {
         const data = await fetchWithTimeout(campaign);
         
+        // Debug: Log what we get back
+        console.log(`📊 Campaign: ${campaign.name} (${campaign.objective})`);
+        console.log(`   Response:`, data);
+        if (data.data) {
+          console.log(`   Leads: ${data.data.leads}, CPL: ${data.data.cpl}`);
+          console.log(`   Purchases: ${data.data.purchases}, ROAS: ${data.data.roas}`);
+        }
+        
         if (data.success) {
           metricsMap[campaign.id] = data.data;
         } else {
+          console.warn(`Failed to fetch metrics for ${campaign.name}: ${data.error}`);
           metricsMap[campaign.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+            spend: 0,
+            impressions: 0,
+            clicks: 0,
+            ctr: 0,
+            cpc: 0,
+            purchases: 0,
+            purchaseValue: 0,
+            roas: 0,
+            leads: 0,
+            cpl: 0
           };
         }
         setSuccess(`✅ Loading metrics... ${index + 1}/${campaignsArray.length}`);
       } catch (err) {
-        console.error(`Error fetching metrics for campaign ${campaign.id}:`, err);
+        console.error(`Timeout or error fetching metrics for campaign ${campaign.id}:`, err);
         metricsMap[campaign.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+          spend: 0,
+          impressions: 0,
+          clicks: 0,
+          ctr: 0,
+          cpc: 0,
+          purchases: 0,
+          purchaseValue: 0,
+          roas: 0,
+          leads: 0,
+          cpl: 0
         };
       }
     });
@@ -253,110 +278,60 @@ export default function App() {
     setSuccess(`✅ All metrics loaded!`);
   };
 
-  // Stage 3B - Fetch Ad Sets
-  const fetchAdSets = async (campaignId, token) => {
-    setAdSetsLoading(prev => ({ ...prev, [campaignId]: true }));
-    try {
-      const response = await fetch(`${API_URL}/api/ad-sets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ campaignId, accessToken: token })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAdSets(prev => ({ ...prev, [campaignId]: data.data || [] }));
-        // Fetch metrics for each ad set
-        fetchAllAdSetMetrics(campaignId, data.data || [], token);
-      }
-    } catch (err) {
-      console.error(`Error fetching ad sets for campaign ${campaignId}:`, err);
-    } finally {
-      setAdSetsLoading(prev => ({ ...prev, [campaignId]: false }));
-    }
-  };
-
-  const fetchAllAdSetMetrics = async (campaignId, adSetsArray, token) => {
-    const getRange = getDateRange(dateRange);
-    let start, end;
-    
-    if (getRange.days) {
-      const endDate = new Date();
-      const startDate = new Date(endDate.getTime() - getRange.days * 24 * 60 * 60 * 1000);
-      start = startDate.toISOString().split('T')[0];
-      end = endDate.toISOString().split('T')[0];
-    } else {
-      start = getRange.start;
-      end = getRange.end;
-    }
-
-    const metricsMap = {};
-
-    const fetchWithTimeout = (adSet, timeoutMs = 10000) => {
-      return Promise.race([
-        fetch(`${API_URL}/api/adset-insights`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adSetId: adSet.id, accessToken: token, dateStart: start, dateEnd: end })
-        }).then(r => r.json()),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-        )
-      ]);
-    };
-
-    const promises = adSetsArray.map(async (adSet) => {
-      try {
-        const data = await fetchWithTimeout(adSet);
-        if (data.success) {
-          metricsMap[adSet.id] = data.data;
-        } else {
-          metricsMap[adSet.id] = {
-            spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-            purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-          };
-        }
-      } catch (err) {
-        metricsMap[adSet.id] = {
-          spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-          purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-        };
-      }
-    });
-
-    await Promise.all(promises);
-    setAdSetMetrics(prev => ({ ...prev, ...metricsMap }));
-  };
-
-  // Stage 3C - Fetch Creatives (Ready for implementation in next phase)
-  // const fetchCreatives = async (adSetId, token) => {
-  //   // TODO: Will implement when building Stage 3C
-  // };
-
   const handleCampaignClick = (campaign) => {
-    if (expandedCampaign === campaign.id) {
-      setExpandedCampaign(null);
-      setExpandedAdSets(null);
-    } else {
-      setExpandedCampaign(campaign.id);
-      // Auto-fetch ad sets when expanding campaign
-      if (!adSets[campaign.id]) {
-        fetchAdSets(campaign.id, accessToken);
-      }
-    }
-  };
-
-  const handleAdSetClick = (adSetId) => {
-    if (expandedAdSets === adSetId) {
-      setExpandedAdSets(null);
-    } else {
-      setExpandedAdSets(adSetId);
-    }
+    setExpandedCampaign(expandedCampaign === campaign.id ? null : campaign.id);
   };
 
   const handleDatePresetChange = (preset) => {
     setDateRange(preset);
+    setShowCustomDatePicker(false);
     if (campaigns.length > 0) {
       fetchAllCampaignMetrics(campaigns, accessToken, preset);
+    }
+  };
+
+  /* eslint-disable-next-line no-loop-func */
+  const handleCustomDateApply = () => {
+    if (customDateStart && customDateEnd && campaigns.length > 0) {
+      setDateRange('custom');
+      setMetricsLoading(true);
+      
+      const metricsMap = {};
+      let completedCount = 0;
+
+      campaigns.forEach((campaign) => {
+        Promise.race([
+          fetch(`${API_URL}/api/campaign-insights`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId: campaign.id, accessToken, dateStart: customDateStart, dateEnd: customDateEnd })
+          }).then(r => r.json()),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), 15000)
+          )
+        ])
+          .then(data => {
+            if (data.success) {
+              metricsMap[campaign.id] = data.data;
+            }
+            completedCount++;
+            setCampaignMetrics(prev => ({ ...prev, [campaign.id]: metricsMap[campaign.id] }));
+            if (completedCount === campaigns.length) {
+              setMetricsLoading(false);
+              setSuccess('✅ Custom date metrics loaded!');
+            }
+          })
+          .catch(err => {
+            console.error(`Error for custom date ${campaign.id}:`, err);
+            completedCount++;
+            if (completedCount === campaigns.length) {
+              setMetricsLoading(false);
+              setError('⚠️ Some metrics timed out. Try again or check if lead gen campaigns have CAPI configured.');
+            }
+          });
+      });
+
+      setShowCustomDatePicker(false);
     }
   };
 
@@ -374,6 +349,7 @@ export default function App() {
       if (data.success) {
         setAdAccounts(data.data || []);
         setSuccess(`✅ Found ${data.count} ad accounts. Select one to view campaigns.`);
+        // Don't auto-select or auto-fetch - let user choose
       } else {
         setError(`Failed: ${data.error}`);
       }
@@ -406,9 +382,9 @@ export default function App() {
     const account = adAccounts.find(a => a.id === accountId);
     setSelectedAccount(accountId);
     setSelectedAccountCurrency(account?.currency || 'USD');
+    console.log(`Account currency: ${account?.currency}`);
     setCampaignMetrics({});
     setExpandedCampaign(null);
-    setExpandedAdSets(null);
     setShowActiveOnly(true);
     setSortBy('performance');
     if (accessToken) {
@@ -440,9 +416,6 @@ export default function App() {
     setFilteredCampaigns([]);
     setCampaignMetrics({});
     setExpandedCampaign(null);
-    setExpandedAdSets(null);
-    setAdSets({});
-    setAdSetMetrics({});
     setError('');
     setSuccess('');
     setShowActiveOnly(true);
@@ -505,6 +478,10 @@ export default function App() {
           @keyframes shimmer {
             0% { background-position: -200% 0; }
             100% { background-position: 200% 0; }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
           }
           @keyframes slideInUp {
             from { opacity: 0; transform: translateY(20px); }
@@ -575,16 +552,6 @@ export default function App() {
       fontFamily: 'system-ui, -apple-system, sans-serif',
       padding: '24px 20px'
     }}>
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        @keyframes shimmer {
-          0% { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-      `}</style>
       <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
         {/* Header */}
         <div style={{
@@ -600,7 +567,7 @@ export default function App() {
               📊 Meta Performance Engine
             </h1>
             <p style={{ fontSize: '14px', color: '#6b7280', margin: '8px 0 0' }}>
-              Stage 3A, 3B, 3C - Campaigns, Ad Sets & Creatives
+              Advanced analytics dashboard
             </p>
           </div>
           <button
@@ -681,6 +648,12 @@ export default function App() {
             gap: '20px',
             marginBottom: '32px'
           }}>
+            <style>{`
+              @keyframes shimmer {
+                0% { background-position: -200% 0; }
+                100% { background-position: 200% 0; }
+              }
+            `}</style>
             {[
               { label: 'Total Spend', value: formatCurrency(summary.totalSpend), color: '#3b82f6', icon: '💰' },
               { label: 'Impressions', value: formatNumber(summary.totalImpressions), color: '#8b5cf6', icon: '👁️' },
@@ -785,30 +758,82 @@ export default function App() {
                   {preset === 'today' ? 'Today' : preset === 'yesterday' ? 'Yesterday' : preset === 'mtd' ? 'MTD' : preset === 'qtd' ? 'QTD' : preset + 'D'}
                 </button>
               ))}
+              <button onClick={() => setShowCustomDatePicker(!showCustomDatePicker)} style={{
+                padding: '6px 12px',
+                background: dateRange === 'custom' ? '#667eea' : '#f3f4f6',
+                border: 'none',
+                borderRadius: '6px',
+                color: dateRange === 'custom' ? 'white' : '#1f2937',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600'
+              }}>
+                📅 Custom
+              </button>
             </div>
           </div>
         )}
 
-        {/* Campaigns List with Ad Sets and Creatives */}
+        {/* Custom Date Picker */}
+        {showCustomDatePicker && (
+          <div style={{
+            background: 'white',
+            padding: '16px',
+            borderRadius: '8px',
+            marginBottom: '16px',
+            display: 'flex',
+            gap: '12px',
+            alignItems: 'flex-end',
+            flexWrap: 'wrap',
+            border: '1px solid #e5e7eb'
+          }}>
+            <div>
+              <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px', fontWeight: '600' }}>From</label>
+              <input type="date" value={customDateStart} onChange={(e) => setCustomDateStart(e.target.value)} style={{ padding: '8px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', color: '#1f2937', fontSize: '14px' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: '#6b7280', display: 'block', marginBottom: '4px', fontWeight: '600' }}>To</label>
+              <input type="date" value={customDateEnd} onChange={(e) => setCustomDateEnd(e.target.value)} style={{ padding: '8px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', color: '#1f2937', fontSize: '14px' }} />
+            </div>
+            <button onClick={handleCustomDateApply} style={{
+              padding: '8px 16px',
+              background: '#667eea',
+              border: 'none',
+              borderRadius: '6px',
+              color: 'white',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '13px'
+            }}>Apply</button>
+          </div>
+        )}
+
+        {/* Campaigns Grid */}
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px', color: '#1f2937' }}>
-            🎯 Campaigns ({filteredCampaigns.length} of {campaigns.length})
+            Campaigns ({filteredCampaigns.length} of {campaigns.length})
           </h2>
           {filteredCampaigns.length > 0 ? (
             <div style={{ display: 'grid', gap: '16px' }}>
               {filteredCampaigns.map((campaign) => {
                 const metrics = campaignMetrics[campaign.id] || {
-                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
+                  spend: 0,
+                  impressions: 0,
+                  clicks: 0,
+                  ctr: 0,
+                  cpc: 0,
+                  purchases: 0,
+                  purchaseValue: 0,
+                  roas: 0,
+                  leads: 0,
+                  cpl: 0
                 };
                 const isLeadGen = isLeadGenCampaign(campaign.objective);
                 const performanceColor = getPerformanceColor(campaign.objective, metrics);
                 const performanceLabel = getPerformanceLabel(campaign.objective, metrics);
-                const campaignAdSets = adSets[campaign.id] || [];
 
                 return (
                   <div key={campaign.id}>
-                    {/* Campaign Card */}
                     <div
                       onClick={() => handleCampaignClick(campaign)}
                       style={{
@@ -864,7 +889,7 @@ export default function App() {
                         </div>
 
                         <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#9ca3af' }}>
-                          {campaign.objective} • {performanceLabel} • 📊 {campaignAdSets.length} Ad Sets
+                          {campaign.objective} • {performanceLabel}
                         </p>
                       </div>
 
@@ -872,199 +897,62 @@ export default function App() {
                         fontSize: '20px',
                         color: '#667eea',
                         transform: expandedCampaign === campaign.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.3s',
-                        marginLeft: '16px'
+                        transition: 'transform 0.3s'
                       }}>
                         ▼
                       </span>
                     </div>
 
-                    {/* Expanded Campaign - Detailed Metrics + Ad Sets */}
                     {expandedCampaign === campaign.id && (
                       <div style={{
-                        background: '#f9fafb',
-                        padding: '20px',
+                        background: 'white',
+                        padding: '24px',
                         borderRadius: '0 0 12px 12px',
                         borderLeft: '2px solid #667eea',
                         borderRight: '2px solid #667eea',
                         borderBottom: '2px solid #667eea',
                         marginTop: '-1px'
                       }}>
-                        {/* Detailed Metrics Grid */}
-                        <div style={{ marginBottom: '24px' }}>
-                          <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>📊 Detailed Metrics</h4>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
-                            {isLeadGen && [
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Leads', value: formatNumber(metrics.leads), color: '#10b981' },
-                              { label: 'CPL', value: formatCurrency(metrics.cpl), color: performanceColor, highlight: true }
-                            ]?.map((item, i) => (
-                              <div key={i} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                            {!isLeadGen && [
-                              { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
-                              { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
-                              { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
-                              { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                              { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
-                              { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
-                              { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
-                              { label: 'ROAS', value: (parseFloat(metrics.roas) || 0).toFixed(2) + 'x', color: performanceColor, highlight: true }
-                            ]?.map((item, i) => (
-                              <div key={i} style={{
-                                background: 'white',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
-                              }}>
-                                <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
-                                <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Ad Sets Section - Stage 3B */}
-                        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
-                          <h4 style={{ margin: '0 0 16px', fontSize: '14px', fontWeight: '700', color: '#1f2937' }}>
-                            📢 Ad Sets ({campaignAdSets.length})
-                          </h4>
-                          {adSetsLoading[campaign.id] ? (
-                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>Loading ad sets...</p>
-                          ) : campaignAdSets.length > 0 ? (
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                              {campaignAdSets.map((adSet) => {
-                                const adSetMetric = adSetMetrics[adSet.id] || {
-                                  spend: 0, impressions: 0, clicks: 0, ctr: 0, cpc: 0,
-                                  purchases: 0, purchaseValue: 0, roas: 0, leads: 0, cpl: 0
-                                };
-                                const adSetPerformanceColor = getPerformanceColor(campaign.objective, adSetMetric);
-
-                                return (
-                                  <div key={adSet.id}>
-                                    <div
-                                      onClick={() => handleAdSetClick(adSet.id)}
-                                      style={{
-                                        background: 'white',
-                                        border: expandedAdSets === adSet.id ? '2px solid #10b981' : '1px solid #e5e7eb',
-                                        borderRadius: '8px',
-                                        padding: '16px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        transition: 'all 0.3s'
-                                      }}
-                                    >
-                                      <div style={{ flex: 1 }}>
-                                        <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1f2937', marginBottom: '8px' }}>
-                                          {adSet.name}
-                                        </p>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', fontSize: '12px' }}>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>Spend:</span> <span style={{ fontWeight: '600', color: '#3b82f6' }}>{formatCurrency(adSetMetric.spend)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>Impressions:</span> <span style={{ fontWeight: '600', color: '#8b5cf6' }}>{formatNumber(adSetMetric.impressions)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>{isLeadGen ? 'Leads' : 'Purchases'}:</span> <span style={{ fontWeight: '600', color: '#10b981' }}>{isLeadGen ? formatNumber(adSetMetric.leads) : formatNumber(adSetMetric.purchases)}</span>
-                                          </div>
-                                          <div>
-                                            <span style={{ color: '#6b7280' }}>{isLeadGen ? 'CPL' : 'ROAS'}:</span> <span style={{ fontWeight: '600', color: adSetPerformanceColor }}>{isLeadGen ? formatCurrency(adSetMetric.cpl) : `${(parseFloat(adSetMetric.roas) || 0).toFixed(2)}x`}</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <span style={{
-                                        fontSize: '16px',
-                                        color: '#10b981',
-                                        transform: expandedAdSets === adSet.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                                        transition: 'transform 0.3s',
-                                        marginLeft: '12px'
-                                      }}>
-                                        ▼
-                                      </span>
-                                    </div>
-
-                                    {/* Expanded Ad Set - Full Metrics - Stage 3C Note */}
-                                    {expandedAdSets === adSet.id && (
-                                      <div style={{
-                                        background: 'white',
-                                        padding: '16px',
-                                        borderRadius: '0 0 8px 8px',
-                                        borderLeft: '2px solid #10b981',
-                                        borderRight: '2px solid #10b981',
-                                        borderBottom: '2px solid #10b981',
-                                        marginTop: '-1px',
-                                        marginBottom: '12px'
-                                      }}>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-                                          {isLeadGen && [
-                                            { label: 'Spend', value: formatCurrency(adSetMetric.spend), color: '#3b82f6' },
-                                            { label: 'Impressions', value: formatNumber(adSetMetric.impressions), color: '#8b5cf6' },
-                                            { label: 'Clicks', value: formatNumber(adSetMetric.clicks), color: '#06b6d4' },
-                                            { label: 'CTR', value: (parseFloat(adSetMetric.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                                            { label: 'CPC', value: formatCurrency(adSetMetric.cpc), color: '#ec4899' },
-                                            { label: 'Leads', value: formatNumber(adSetMetric.leads), color: '#10b981' },
-                                            { label: 'CPL', value: formatCurrency(adSetMetric.cpl), color: adSetPerformanceColor, highlight: true }
-                                          ]?.map((item, i) => (
-                                            <div key={i} style={{
-                                              background: '#f9fafb',
-                                              padding: '12px',
-                                              borderRadius: '6px',
-                                              border: item.highlight ? `2px solid ${adSetPerformanceColor}` : '1px solid #e5e7eb',
-                                              fontSize: '12px'
-                                            }}>
-                                              <p style={{ margin: 0, color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>{item.label}</p>
-                                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                                            </div>
-                                          ))}
-                                          {!isLeadGen && [
-                                            { label: 'Spend', value: formatCurrency(adSetMetric.spend), color: '#3b82f6' },
-                                            { label: 'Impressions', value: formatNumber(adSetMetric.impressions), color: '#8b5cf6' },
-                                            { label: 'Clicks', value: formatNumber(adSetMetric.clicks), color: '#06b6d4' },
-                                            { label: 'CTR', value: (parseFloat(adSetMetric.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
-                                            { label: 'CPC', value: formatCurrency(adSetMetric.cpc), color: '#ec4899' },
-                                            { label: 'Purchases', value: formatNumber(adSetMetric.purchases), color: '#10b981' },
-                                            { label: 'Purchase Value', value: formatCurrency(adSetMetric.purchaseValue), color: '#10b981' },
-                                            { label: 'ROAS', value: (parseFloat(adSetMetric.roas) || 0).toFixed(2) + 'x', color: adSetPerformanceColor, highlight: true }
-                                          ]?.map((item, i) => (
-                                            <div key={i} style={{
-                                              background: '#f9fafb',
-                                              padding: '12px',
-                                              borderRadius: '6px',
-                                              border: item.highlight ? `2px solid ${adSetPerformanceColor}` : '1px solid #e5e7eb',
-                                              fontSize: '12px'
-                                            }}>
-                                              <p style={{ margin: 0, color: '#6b7280', fontWeight: '600', marginBottom: '4px' }}>{item.label}</p>
-                                              <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: item.color }}>{item.value}</p>
-                                            </div>
-                                          ))}
-                                        </div>
-                                        <p style={{ margin: '12px 0 0', padding: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '12px', color: '#1e40af' }}>
-                                          💡 Stage 3C (Creatives): Coming soon - will show individual ad creatives under this ad set
-                                        </p>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px' }}>
+                          {isLeadGen && [
+                            { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
+                            { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
+                            { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
+                            { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
+                            { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
+                            { label: 'Leads', value: formatNumber(metrics.leads), color: '#10b981' },
+                            { label: 'CPL', value: formatCurrency(metrics.cpl), color: performanceColor, highlight: true }
+                          ]?.map((item, i) => (
+                            <div key={i} style={{
+                              background: '#f9fafb',
+                              padding: '16px',
+                              borderRadius: '8px',
+                              border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
+                            }}>
+                              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
+                              <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
                             </div>
-                          ) : (
-                            <p style={{ color: '#9ca3af', textAlign: 'center', padding: '20px' }}>No ad sets found</p>
-                          )}
+                          ))}
+                          {!isLeadGen && [
+                            { label: 'Spend', value: formatCurrency(metrics.spend), color: '#3b82f6' },
+                            { label: 'Impressions', value: formatNumber(metrics.impressions), color: '#8b5cf6' },
+                            { label: 'Clicks', value: formatNumber(metrics.clicks), color: '#06b6d4' },
+                            { label: 'CTR', value: (parseFloat(metrics.ctr) || 0).toFixed(2) + '%', color: '#f59e0b' },
+                            { label: 'CPC', value: formatCurrency(metrics.cpc), color: '#ec4899' },
+                            { label: 'Purchases', value: formatNumber(metrics.purchases), color: '#10b981' },
+                            { label: 'Purchase Value', value: formatCurrency(metrics.purchaseValue), color: '#10b981' },
+                            { label: 'ROAS', value: (parseFloat(metrics.roas) || 0).toFixed(2) + 'x', color: performanceColor, highlight: true }
+                          ]?.map((item, i) => (
+                            <div key={i} style={{
+                              background: '#f9fafb',
+                              padding: '16px',
+                              borderRadius: '8px',
+                              border: item.highlight ? `2px solid ${performanceColor}` : '1px solid #e5e7eb'
+                            }}>
+                              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#6b7280', fontWeight: '600' }}>{item.label}</p>
+                              <p style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: item.color }}>{item.value}</p>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -1074,7 +962,7 @@ export default function App() {
             </div>
           ) : (
             <p style={{ color: '#9ca3af', textAlign: 'center', padding: '40px', margin: 0 }}>
-              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No active campaigns found.'}
+              {loading ? 'Loading campaigns...' : campaigns.length === 0 ? 'Select an ad account to view campaigns.' : 'No active campaigns found. Click "Show All" to see paused campaigns.'}
             </p>
           )}
         </div>
@@ -1085,7 +973,7 @@ export default function App() {
           textAlign: 'center',
           margin: '40px 0 0'
         }}>
-          🚀 Stage 3A ✅ | Stage 3B ✅ | Stage 3C (Creatives coming soon) | 🔐 Securely connected
+          🔐 Securely connected | Real-time data | Currency: {selectedAccountCurrency} | Smart campaign detection
         </p>
       </div>
     </div>
